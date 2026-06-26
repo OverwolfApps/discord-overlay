@@ -1,0 +1,465 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  position: relative;
+  /* By default, let mouse events click through unless in interactive mode */
+  pointer-events: none;
+}
+
+/* Interactive elements will capture pointer events only when overlay is active */
+.interactive {
+  pointer-events: auto !important;
+}
+
+/* Cursor Unlocked Status Badge */
+.interactive-badge {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(37, 128, 195, 0.95);
+  border: 1px solid rgba(0, 168, 255, 0.6);
+  box-shadow: 0 0 15px rgba(37, 128, 195, 0.4);
+  padding: 6px 16px;
+  border-radius: 20px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  display: none;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.85; }
+  50% { opacity: 1; box-shadow: 0 0 20px rgba(37, 128, 195, 0.7); }
+  100% { opacity: 0.85; }
+}
+
+/* --- VOICE HUD USERS CONTAINER --- */
+.voice-hud {
+  position: absolute;
+  background: rgba(10, 15, 29, 0.92);
+  border: 1px solid rgba(37, 128, 195, 0.5);
+  border-radius: 6px;
+  padding: 12px;
+  min-width: 200px;
+  max-width: 320px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(37, 128, 195, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+/* Alignment positions mapped in JS */
+.align-topLeft { top: 20px; left: 20px; }
+.align-topRight { top: 20px; right: 20px; }
+.align-bottomLeft { bottom: 80px; left: 20px; }
+.align-bottomRight { bottom: 80px; right: 20px; }
+
+.hud-header {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+}
+
+.hud-server {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(194, 195, 197, 0.4);
+}
+
+.hud-channel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2580c3;
+  text-shadow: 0 0 8px rgba(37, 128, 195, 0.3);
+}
+
+.hud-users {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* User Row Layout */
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.user-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Avatar Circle */
+.avatar-container {
+  position: relative;
+  width: 28px;
+  height: 28px;
+}
+
+.user-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Active Speaker Ring */
+.user-row.speaking .user-avatar {
+  border-color: #00ff80;
+  box-shadow: 0 0 10px rgba(0, 255, 128, 0.5);
+}
+
+/* Voice Flags Overlays */
+.status-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  border: 1px solid rgba(10, 15, 29, 0.95);
+}
+
+.status-badge.mute {
+  background: #c21913;
+}
+
+.status-badge.deafen {
+  background: #64748b;
+}
+
+.status-badge svg {
+  width: 8px;
+  height: 8px;
+}
+
+.user-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #c2c3c5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+  transition: color 0.15s ease;
+}
+
+.user-row.speaking .user-name {
+  color: #ffffff;
+}
+
+.user-flags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.flag-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(194, 195, 197, 0.5);
+  transition: color 0.15s ease;
+}
+
+.flag-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Camera on — Discord green */
+.flag-badge.video {
+  color: #23a55a;
+}
+
+/* Live screenshare — Discord blurple */
+.flag-badge.streaming {
+  color: #5865f2;
+}
+
+/* Watching your stream — spectator gray */
+.flag-badge.watching {
+  color: #949ba4;
+}
+
+/* Typing indicator — three bouncing dots */
+.flag-badge.typing {
+  color: #a0b4cc;
+  align-items: flex-end;
+  padding-bottom: 1px;
+}
+
+.typing-dots {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+}
+
+.typing-dots span {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.4; }
+  30%            { transform: translateY(-4px); opacity: 1;   }
+}
+
+/* --- BOTTOM CONTROLS BAR --- */
+.voice-controls-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  /* Hover area handles cursor activation */
+  pointer-events: auto;
+}
+
+.controls-container {
+  background: rgba(10, 15, 29, 0.9);
+  border: 1px solid rgba(37, 128, 195, 0.35);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  padding: 8px 16px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.4;
+  transform: scale(0.95);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Highlight control bar on hover or interactive unlock */
+.voice-controls-bar:hover .controls-container,
+body.cursor-active .controls-container {
+  opacity: 1;
+  transform: scale(1);
+  border-color: rgba(37, 128, 195, 0.6);
+  box-shadow: 0 8px 32px rgba(37, 128, 195, 0.2);
+}
+
+.control-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #c2c3c5;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+  background: rgba(37, 128, 195, 0.15);
+  border-color: rgba(37, 128, 195, 0.5);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.control-btn.active {
+  background: rgba(194, 25, 19, 0.15);
+  border-color: #c21913;
+  color: #c21913;
+}
+
+.control-btn.disconnect {
+  background: rgba(194, 25, 19, 0.1);
+  border-color: rgba(194, 25, 19, 0.3);
+  color: #f87171;
+}
+
+.control-btn.disconnect:hover {
+  background: #c21913;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+/* --- SOUNDBOARD POPUP PANEL --- */
+.soundboard-popup {
+  position: absolute;
+  bottom: 58px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: rgba(10, 15, 29, 0.95);
+  border: 1px solid rgba(37, 128, 195, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  padding: 12px;
+  width: 260px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.soundboard-popup.show {
+  display: flex;
+  transform: translateX(-50%) translateY(0);
+}
+
+.popup-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(194, 195, 197, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.popup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.popup-grid::-webkit-scrollbar {
+  width: 3px;
+}
+
+.popup-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.popup-sound-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 8px 6px;
+  border-radius: 4px;
+  color: #c2c3c5;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.popup-sound-btn:hover {
+  background: rgba(37, 128, 195, 0.15);
+  border-color: rgba(37, 128, 195, 0.45);
+  color: #ffffff;
+}
+
+/* --- IN-GAME NOTIFICATIONS --- */
+.notifications-container {
+  position: absolute;
+  top: 60px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.notif-card {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(37, 128, 195, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 280px;
+  pointer-events: auto;
+  transform: translateX(120%);
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.notif-card.fade-out {
+  animation: slideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.notif-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e293b;
+}
+
+.notif-details {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notif-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2580c3;
+}
+
+.notif-body {
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes slideIn {
+  to { transform: translateX(0); }
+}
+
+@keyframes slideOut {
+  from { transform: translateX(0); }
+  to { transform: translateX(120%); }
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Discord Overlay HUD</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Unlock Cursor Badge -->
+  <div class="interactive-badge" id="interactive-badge">
+    <span>Cursor Unlocked (Ctrl+`)</span>
+  </div>
+
+
+  <!-- Voice Users HUD List -->
+  <div class="voice-hud" id="voice-hud">
+    <div class="hud-header">
+      <span class="hud-server" id="hud-server">-</span>
+      <span class="hud-channel" id="hud-channel">Not Connected</span>
+    </div>
+    <div class="hud-users" id="hud-users">
+      <!-- Users populated dynamically -->
+    </div>
+  </div>
+
+  <!-- Bottom Voice Controls Bar -->
+  <div class="voice-controls-bar" id="voice-controls-bar">
+    <div class="controls-container">
+      <!-- Mute Toggle -->
+      <button class="control-btn" id="btn-mute" title="Toggle Mute">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <!-- Mic Icon -->
+          <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+          <!-- Slash for Mute (Shown dynamically via CSS) -->
+          <line id="mute-slash" x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2" style="display: none;" />
+        </svg>
+      </button>
+
+      <!-- Deafen Toggle -->
+      <button class="control-btn" id="btn-deafen" title="Toggle Deafen">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <!-- Headphones Icon -->
+          <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12v5c0 1.66 1.34 3 3 3h3v-8H4v-2c0-4.41 3.59-8 8-8s8 3.59 8 8v2h-4v8h3c1.66 0 3-1.34 3-3v-5c0-5.52-4.48-10-10-10z"/>
+          <!-- Slash for Deafen -->
+          <line id="deafen-slash" x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2" style="display: none;" />
+        </svg>
+      </button>
+
+      <!-- Soundboard Trigger -->
+      <button class="control-btn" id="btn-soundboard" title="Open Soundboard">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <!-- Grid Icon -->
+          <path fill="currentColor" d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>
+        </svg>
+      </button>
+
+      <!-- Disconnect Toggle -->
+      <button class="control-btn disconnect" id="btn-disconnect" title="Disconnect">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <!-- Phone Disconnect Icon -->
+          <path fill="currentColor" d="M12 9c-2.2 0-4.3.4-6.2 1.1-.5.2-.9.7-.9 1.3v3.2c0 .5.3.9.7 1.1l2.4.8c.4.1.8 0 1.1-.3l1.8-1.8c1 .3 2.1.5 3.1.5s2.1-.2 3.1-.5l1.8 1.8c.3.3.7.4 1.1.3l2.4-.8c.4-.2.7-.6.7-1.1v-3.2c0-.5-.4-1.1-.9-1.3C16.3 9.4 14.2 9 12 9z" transform="rotate(135 12 12)"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Soundboard Floating Panel -->
+    <div class="soundboard-popup" id="soundboard-popup">
+      <div class="popup-header">Soundboard</div>
+      <div class="popup-grid" id="popup-sound-grid">
+        <!-- populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="overlay.js"></script>
+</body>
+</html>

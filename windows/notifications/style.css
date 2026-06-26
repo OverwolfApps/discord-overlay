@@ -1,0 +1,238 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  width: 300px;
+  height: 100vh;
+  background: transparent;
+  overflow: hidden;
+  /* Transparent areas never capture mouse — only .ts-notif-card does */
+  pointer-events: none;
+}
+
+/* Stack container — always column by default */
+.notifications-stack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  gap: 8px;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* Bottom-aligned: reverse stacking order, anchor to bottom */
+.notifications-stack.flow-up {
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+}
+
+/* Notification Card */
+.ts-notif-card {
+  width: 100%;
+  min-height: 52px;
+  max-height: 52px;
+  background: rgba(18, 22, 33, 0.92);
+  border: 1px solid rgba(37, 128, 195, 0.35);
+  border-left: 3px solid #2580c3;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+  flex-shrink: 0;
+  overflow: hidden;
+  opacity: var(--notif-opacity, 1);
+  transition: max-height 0.25s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+.ts-notif-card:hover {
+  opacity: 1;
+}
+
+/* Expanded state on hover — show all text */
+.ts-notif-card.expanded {
+  max-height: 200px;
+  box-shadow: 0 8px 24px rgba(37, 128, 195, 0.25);
+  border-color: rgba(37, 128, 195, 0.6);
+  align-items: flex-start;
+  padding: 8px 0;
+}
+
+.ts-notif-card.expanded .notif-text {
+  overflow: visible;
+}
+
+.ts-notif-card.expanded .notif-name,
+.ts-notif-card.expanded .notif-body {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.ts-notif-card.expanded .notif-icon-frame {
+  margin-top: 2px;
+}
+
+/* Slide-in from right */
+.notifications-stack.align-right .ts-notif-card {
+  align-self: flex-end;
+  transform: translateX(120%);
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.notifications-stack.align-right .ts-notif-card.fade-out {
+  animation: slideOutRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Slide-in from left */
+.notifications-stack.align-left .ts-notif-card {
+  align-self: flex-start;
+  transform: translateX(-120%);
+  animation: slideInLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.notifications-stack.align-left .ts-notif-card.fade-out {
+  animation: slideOutLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideInRight {
+  to { transform: translateX(0); }
+}
+@keyframes slideOutRight {
+  from { transform: translateX(0); }
+  to   { transform: translateX(120%); }
+}
+@keyframes slideInLeft {
+  to { transform: translateX(0); }
+}
+@keyframes slideOutLeft {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-120%); }
+}
+
+/* Icon */
+.notif-icon-frame {
+  width: 36px;
+  height: 36px;
+  margin-left: 10px;
+  margin-right: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notif-icon {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.notif-avatar {
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Text */
+.notif-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding-right: 10px;
+  flex: 1;
+}
+
+.notif-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2580c3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-body {
+  font-size: 11px;
+  font-weight: 400;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* --- Markdown inline elements --- */
+.notif-name strong, .notif-body strong { font-weight: 700; }
+.notif-name em,     .notif-body em     { font-style: italic; }
+.notif-name u,      .notif-body u      { text-decoration: underline; }
+.notif-name s,      .notif-body s      { text-decoration: line-through; }
+
+code.md-code {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 0 3px;
+  color: #d4e8ff;
+}
+
+/* Spoiler: blurred until hovered (only works when card is expanded) */
+span.md-spoiler {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  padding: 0 2px;
+  color: transparent;
+  filter: blur(4px);
+  transition: filter 0.2s ease, color 0.2s ease;
+  cursor: pointer;
+}
+.ts-notif-card.expanded span.md-spoiler:hover {
+  filter: none;
+  color: inherit;
+}
+
+/* Block headings — rendered as inline spans scaled to the card's font size */
+span.md-h1 {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+}
+span.md-h2 {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.3;
+}
+span.md-h3 {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  line-height: 1.3;
+}
+
+/* Compact lists */
+ul.md-list,
+ol.md-list {
+  margin: 2px 0 2px 14px;
+  padding: 0;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+ul.md-list li,
+ol.md-list li {
+  margin: 1px 0;
+  line-height: 1.4;
+}
