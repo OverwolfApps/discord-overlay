@@ -18,9 +18,13 @@ An overlay app for Discord that runs on the Overwolf platform. Powered by Orbola
 
 ## Installation
 
-1. Download the app from the Overwolf App Store
-2. Install through the Overwolf client
-3. Launch the app from your Overwolf library
+### Manual Installation (.opk)
+
+1. Download the latest `.opk` file from the [GitHub Releases](https://github.com/OverwolfApps/discord-overlay/releases)
+2. Open the Overwolf client
+3. Go to Settings → Apps → "Install App from .opk file"
+4. Select the downloaded `.opk` file
+5. The app will be installed and appear in your Overwolf library
 
 ## Usage
 
@@ -50,7 +54,7 @@ This app uses:
 
 ## License
 
-This project is licensed under the Unlicense - see the [UNLICENSE](UNLICENSE) file for details.
+This project is unlicensed and released into the public domain.
 
 ## Support
 
