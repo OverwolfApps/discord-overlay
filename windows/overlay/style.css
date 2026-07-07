@@ -19,36 +19,6 @@ body {
   pointer-events: none;
 }
 
-/* Interactive elements will capture pointer events only when overlay is active */
-.interactive {
-  pointer-events: auto !important;
-}
-
-/* Cursor Unlocked Status Badge */
-.interactive-badge {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(37, 128, 195, 0.95);
-  border: 1px solid rgba(0, 168, 255, 0.6);
-  box-shadow: 0 0 15px rgba(37, 128, 195, 0.4);
-  padding: 6px 16px;
-  border-radius: 20px;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  display: none;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.85; }
-  50% { opacity: 1; box-shadow: 0 0 20px rgba(37, 128, 195, 0.7); }
-  100% { opacity: 0.85; }
-}
-
 /* --- VOICE HUD USERS CONTAINER --- */
 .voice-hud {
   position: absolute;
@@ -273,9 +243,8 @@ body {
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Highlight control bar on hover or interactive unlock */
-.voice-controls-bar:hover .controls-container,
-body.cursor-active .controls-container {
+/* Highlight control bar on hover */
+.voice-controls-bar:hover .controls-container {
   opacity: 1;
   transform: scale(1);
   border-color: rgba(37, 128, 195, 0.6);
@@ -321,6 +290,113 @@ body.cursor-active .controls-container {
   color: #ffffff;
 }
 
+.control-btn.settings-btn {
+  color: rgba(194, 195, 197, 0.4);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.control-btn.settings-btn:hover {
+  color: #c2c3c5;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Camera on — green tint */
+.control-btn.camera-on {
+  background: rgba(35, 165, 90, 0.15);
+  border-color: #23a55a;
+  color: #23a55a;
+}
+
+.control-btn.camera-on:hover {
+  background: #23a55a;
+  border-color: #1a8a47;
+  color: #ffffff;
+}
+
+/* Streaming on — Discord blurple tint */
+.control-btn.streaming-on {
+  background: rgba(88, 101, 242, 0.15);
+  border-color: #5865f2;
+  color: #5865f2;
+}
+
+.control-btn.streaming-on:hover {
+  background: #5865f2;
+  border-color: #4752c4;
+  color: #ffffff;
+}
+
+/* --- STREAM SUBMENU POPUP --- */
+.stream-btn-wrapper {
+  position: relative;
+}
+
+.stream-popup {
+  position: absolute;
+  bottom: 54px;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: rgba(10, 15, 29, 0.97);
+  border: 1px solid rgba(37, 128, 195, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  padding: 6px;
+  width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  z-index: 10001;
+}
+
+.stream-popup.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.stream-option-btn {
+  background: transparent;
+  border: none;
+  color: #c2c3c5;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.stream-option-btn:hover {
+  background: rgba(37, 128, 195, 0.2);
+  color: #ffffff;
+}
+
+.stream-option-btn.stop {
+  color: #f87171;
+}
+
+.stream-option-btn.stop:hover {
+  background: rgba(194, 25, 19, 0.2);
+  color: #ff8a8a;
+}
+
+.stream-option-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 3px 6px;
+}
+
 /* --- SOUNDBOARD POPUP PANEL --- */
 .soundboard-popup {
   position: absolute;
@@ -333,15 +409,19 @@ body.cursor-active .controls-container {
   border-radius: 6px;
   padding: 12px;
   width: 260px;
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: all 0.2s ease;
-  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
 }
 
 .soundboard-popup.show {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
   transform: translateX(-50%) translateY(0);
 }
 

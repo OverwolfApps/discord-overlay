@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Discord Overlay HUD</title>
+  <link rel="stylesheet" href="../overlay/style.css" />
+  <style>
+    body { overflow: hidden; }
+    .voice-hud { position: static; cursor: grab; }
+    .voice-hud.dragging { cursor: grabbing; }
+  </style>
+</head>
+<body>
+  <div class="voice-hud" id="voice-hud">
+    <div class="hud-header">
+      <span class="hud-server" id="hud-server">-</span>
+      <span class="hud-channel" id="hud-channel">Not Connected</span>
+    </div>
+    <div class="hud-users" id="hud-users"></div>
+  </div>
+  <script type="module" src="hud.js"></script>
+</body>
+</html>

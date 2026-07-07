@@ -25,8 +25,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI elements
   const messageNotificationsToggle = document.getElementById('message-notifications-toggle');
   const eventNotificationsToggle = document.getElementById('event-notifications-toggle');
-  const markdownToggle         = document.getElementById('markdown-toggle');
-  const desktopOverlayToggle   = document.getElementById('desktop-overlay-toggle');
+  const externalNotificationsToggle = document.getElementById('external-notifications-toggle');
+  const externalNotificationsPort   = document.getElementById('external-notifications-port');
+  const externalPortRow             = document.getElementById('external-port-row');
+  const markdownToggle           = document.getElementById('markdown-toggle');
+  const desktopOverlayToggle     = document.getElementById('desktop-overlay-toggle');
+  const statusOverlayToggle      = document.getElementById('status-overlay-toggle');
+  const dashboardOverlayToggle   = document.getElementById('dashboard-overlay-toggle');
   const sliderH = document.getElementById('slider-horizontal');
   const sliderV = document.getElementById('slider-vertical');
   const sliderScale = document.getElementById('slider-scale');
@@ -40,17 +45,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   const labelH = document.getElementById('slider-h-label');
   const labelV = document.getElementById('slider-v-label');
 
-  const statusVal  = document.getElementById('discord-status');
-  const serverVal   = document.getElementById('discord-guild-id');
-  const channelVal  = document.getElementById('discord-channel-id');
-  const soundboardGrid = document.getElementById('soundboard-grid');
 
   // 1. Sync controls with initial appSettings
   const settings = backgroundWindow.appSettings;
   messageNotificationsToggle.checked = settings.notificationsEnabled;
-  eventNotificationsToggle.checked = settings.eventNotificationsEnabled;
-  markdownToggle.checked       = settings.markdownEnabled ?? true;
-  desktopOverlayToggle.checked = settings.overlayOnDesktop ?? false;
+  eventNotificationsToggle.checked   = settings.eventNotificationsEnabled;
+  externalNotificationsToggle.checked = settings.useExternalNotifications === true;
+  externalNotificationsPort.value     = settings.externalNotificationsPort || 61234;
+  externalPortRow.style.display       = externalNotificationsToggle.checked ? '' : 'none';
+  markdownToggle.checked             = settings.markdownEnabled ?? true;
+  desktopOverlayToggle.checked       = settings.overlayOnDesktop ?? false;
+  statusOverlayToggle.checked        = settings.statusOverlayVisible !== false;
+  dashboardOverlayToggle.checked     = settings.dashboardOverlayVisible !== false;
   sliderScale.value = settings.notificationScale || 1.0;
   inputScale.value = (settings.notificationScale || 1.0).toFixed(2);
   sliderMaxNotifs.value = settings.maxNotifications || 5;
@@ -107,12 +113,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     backgroundWindow.saveSettings({ eventNotificationsEnabled: e.target.checked });
   });
 
+  externalNotificationsToggle.addEventListener('change', (e) => {
+    backgroundWindow.saveSettings({ useExternalNotifications: e.target.checked });
+    externalPortRow.style.display = e.target.checked ? '' : 'none';
+  });
+
+  externalNotificationsPort.addEventListener('change', (e) => {
+    const p = parseInt(e.target.value, 10);
+    if (p >= 1 && p <= 65535) backgroundWindow.saveSettings({ externalNotificationsPort: p });
+  });
+
   markdownToggle.addEventListener('change', (e) => {
     backgroundWindow.saveSettings({ markdownEnabled: e.target.checked });
   });
 
   desktopOverlayToggle.addEventListener('change', (e) => {
     backgroundWindow.saveSettings({ overlayOnDesktop: e.target.checked });
+  });
+
+  statusOverlayToggle.addEventListener('change', (e) => {
+    backgroundWindow.saveSettings({ statusOverlayVisible: e.target.checked });
+  });
+
+  dashboardOverlayToggle.addEventListener('change', (e) => {
+    backgroundWindow.saveSettings({ dashboardOverlayVisible: e.target.checked });
   });
 
   // --- Preview lifecycle ---
@@ -139,11 +163,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     slider.addEventListener('mouseup',   schedulePreviewCleanup);
   });
 
-  // Radio corners change
+  // Radio corners change — also clears any saved drag position so corner takes effect
   document.querySelectorAll('input[name="screen-corner"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       if (e.target.checked) {
-        backgroundWindow.saveSettings({ alignment: e.target.value });
+        backgroundWindow.saveSettings({ alignment: e.target.value, hudX: null, hudY: null });
+        localStorage.removeItem('hudX');
+        localStorage.removeItem('hudY');
         updateSliderLabels(e.target.value);
         startPreview();
         schedulePreviewCleanup();
@@ -186,9 +212,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   eventBus.addListener('settings-changed', (newSettings) => {
     setConnectionMode(newSettings.connectionMode);
     messageNotificationsToggle.checked = newSettings.notificationsEnabled;
-    eventNotificationsToggle.checked = newSettings.eventNotificationsEnabled;
-    markdownToggle.checked       = newSettings.markdownEnabled ?? true;
-    desktopOverlayToggle.checked = newSettings.overlayOnDesktop ?? false;
+    eventNotificationsToggle.checked   = newSettings.eventNotificationsEnabled;
+    externalNotificationsToggle.checked = newSettings.useExternalNotifications === true;
+    externalNotificationsPort.value     = newSettings.externalNotificationsPort || 61234;
+    externalPortRow.style.display       = externalNotificationsToggle.checked ? '' : 'none';
+    markdownToggle.checked             = newSettings.markdownEnabled ?? true;
+    desktopOverlayToggle.checked       = newSettings.overlayOnDesktop ?? false;
+    statusOverlayToggle.checked        = newSettings.statusOverlayVisible !== false;
+    dashboardOverlayToggle.checked     = newSettings.dashboardOverlayVisible !== false;
     sliderH.value = newSettings.horizontalOffset;
     sliderV.value = newSettings.verticalOffset;
     sliderScale.value = newSettings.notificationScale || 1.0;
@@ -206,19 +237,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (rad) rad.checked = true;
   });
 
-  eventBus.addListener('connection-status', (status) => {
-    updateConnectionStatus(status);
+  eventBus.addListener('connection-status', () => {
+    renderStateViewer();
   });
 
-  eventBus.addListener('state-updated', (state) => {
-    updateDiscordState(state);
+  eventBus.addListener('state-updated', () => {
+    renderStateViewer();
   });
 
-
-
-  // Initial Sync from State
-  updateConnectionStatus(backgroundWindow.rpcState.authenticated ? 'authenticated' : (backgroundWindow.rpcState.connected ? 'connected' : 'disconnected'));
-  updateDiscordState(backgroundWindow.rpcState);
+  // Initial render
+  renderStateViewer();
 });
 
 // Help functions
@@ -249,36 +277,62 @@ function updateSliderLabels(alignment) {
   }
 }
 
-function updateConnectionStatus(status) {
-  const statusVal = document.getElementById('discord-status');
-  statusVal.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-  statusVal.className = 'status-value ' + status;
+function renderStateViewer() {
+  const viewer = document.getElementById('state-viewer');
+  const badge  = document.getElementById('state-badge');
+  if (!viewer) return;
+
+  const state = backgroundWindow.rpcState;
+  const settings = backgroundWindow.appSettings;
+
+  const snapshot = {
+    connection: {
+      connected: state.connected,
+      authenticated: state.authenticated,
+      mode: settings.connectionMode,
+    },
+    voice: {
+      guildId: state.guildId,
+      guildName: state.guildName,
+      channelId: state.channelId,
+      channelName: state.channelName,
+      selfMute: state.selfMute,
+      selfDeaf: state.selfDeaf,
+      selfStreaming: state.selfStreaming,
+      selfVideo: state.selfVideo,
+    },
+    users: (state.users || []).map(u => ({
+      id: u.id,
+      username: u.username,
+      mute: u.mute,
+      deaf: u.deaf,
+      speaking: u.speaking,
+      video: u.video,
+      streaming: u.streaming,
+      watching: u.watching,
+      typing: u.typing,
+    })),
+    soundboard: (state.soundboardSounds || []).map(s => ({ id: s.soundId, name: s.name, emoji: s.emojiName })),
+  };
+
+  const statusText = state.authenticated ? 'authenticated' : state.connected ? 'connected' : 'disconnected';
+  badge.textContent = statusText;
+  badge.className = 'state-badge ' + statusText;
+
+  viewer.innerHTML = syntaxHighlight(JSON.stringify(snapshot, null, 2));
 }
 
-function updateDiscordState(state) {
-  const serverVal  = document.getElementById('discord-guild-id');
-  const channelVal = document.getElementById('discord-channel-id');
-  const soundboardGrid = document.getElementById('soundboard-grid');
-
-  serverVal.textContent  = state.guildId   || '-';
-  channelVal.textContent = state.channelId || '-';
-
-  // Render Soundboard sounds
-  soundboardGrid.innerHTML = '';
-  if (state.soundboardSounds && state.soundboardSounds.length > 0) {
-    state.soundboardSounds.forEach(sound => {
-      const btn = document.createElement('button');
-      btn.className = 'sound-btn';
-      btn.innerHTML = `
-        <span class="sound-emoji">${sound.emojiName}</span>
-        <span class="sound-name">${sound.name}</span>
-      `;
-      btn.addEventListener('click', () => {
-        backgroundWindow.playSound(sound.soundId, sound.guildId);
-      });
-      soundboardGrid.appendChild(btn);
+function syntaxHighlight(json) {
+  return json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+      let cls = 'json-num';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'json-key' : 'json-str';
+      } else if (/true|false/.test(match)) {
+        cls = 'json-bool';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      }
+      return `<span class="${cls}">${match}</span>`;
     });
-  } else {
-    soundboardGrid.innerHTML = '<div class="no-sounds">No soundboard sounds available. Please join a voice channel.</div>';
-  }
 }

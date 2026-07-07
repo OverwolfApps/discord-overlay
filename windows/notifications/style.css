@@ -200,6 +200,8 @@ span.md-spoiler {
   color: inherit;
 }
 
+span.md-line { display: inline; }
+
 /* Block headings — rendered as inline spans scaled to the card's font size */
 span.md-h1 {
   display: block;

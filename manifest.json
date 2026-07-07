@@ -20,17 +20,13 @@
   ],
   "data": {
     "start_window": "background",
+    "externally_connectable": {
+      "matches": ["http://127.0.0.1", "http://localhost"]
+    },
     "extra-objects": {
       "websocket-server-plugin": {
         "file": "plugins/DiscordOverlayWebSocketServer.dll",
         "class": "DiscordOverlay.WebSocketServerPlugin"
-      }
-    },
-    "hotkeys": {
-      "toggle_overlay_interactive": {
-        "title": "Toggle Overlay Interaction (Unlock Cursor)",
-        "action-type": "custom",
-        "default": "Ctrl+BackQuote"
       }
     },
     "windows": {
@@ -54,13 +50,28 @@
           "height": 470
         }
       },
-      "overlay": {
-        "file": "windows/overlay/overlay.html",
+      "hud": {
+        "file": "windows/hud/hud.html",
         "transparent": true,
         "resizable": false,
+        "native_window": true,
+        "show_in_taskbar": false,
+        "topmost": true,
         "size": {
-          "width": 1920,
-          "height": 1080
+          "width": 260,
+          "height": 400
+        }
+      },
+      "dashboard": {
+        "file": "windows/dashboard/dashboard.html",
+        "transparent": true,
+        "resizable": false,
+        "native_window": true,
+        "show_in_taskbar": false,
+        "topmost": true,
+        "size": {
+          "width": 420,
+          "height": 360
         }
       },
       "notifications": {
@@ -82,7 +93,7 @@
     "developer": {
       "enable_auto_refresh": true,
       "reload_delay": 1000,
-      "filter": "*.*"
+      "filter": "*.json;*.html;*.js;*.dll;*.css;*.ico;*.png"
     }
   }
 }

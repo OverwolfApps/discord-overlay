@@ -61,6 +61,19 @@ export class WindowsService {
     });
   }
 
+  static async changeSize(name, width, height) {
+    const { window } = await WindowsService.obtainWindow(name);
+    return new Promise((resolve, reject) => {
+      overwolf.windows.changeSize(window.id, width, height, result => {
+        if (result && result.success) {
+          resolve(result);
+        } else {
+          reject(new Error(result.error));
+        }
+      });
+    });
+  }
+
   static async setTopmost(name, shouldBeTopmost) {
     const { window } = await WindowsService.obtainWindow(name);
     return new Promise((resolve, reject) => {
@@ -84,30 +97,6 @@ export class WindowsService {
           reject(new Error(result.error));
         }
       });
-    });
-  }
-
-  static async setClickThrough(name, clickThrough) {
-    const { window } = await WindowsService.obtainWindow(name);
-    return new Promise((resolve, reject) => {
-      const style = 'InputPassThrough';
-      if (clickThrough) {
-        overwolf.windows.setWindowStyle(window.id, style, result => {
-          if (result.success) {
-            resolve(result);
-          } else {
-            reject(new Error(result.error));
-          }
-        });
-      } else {
-        overwolf.windows.removeWindowStyle(window.id, style, result => {
-          if (result.success) {
-            resolve(result);
-          } else {
-            reject(new Error(result.error));
-          }
-        });
-      }
     });
   }
 }

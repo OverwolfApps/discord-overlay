@@ -235,11 +235,13 @@ function parseMarkdown(text) {
       result.push(`<li>${ol[1]}</li>`);
     } else {
       closeList();
-      result.push(line || '<br>');
+      // Wrap plain text lines in a span so they get a line break without
+      // injecting <br> between block-level list/heading elements.
+      result.push(line ? `<span class="md-line">${line}</span><br>` : '<br>');
     }
   }
   closeList();
-  out = result.join('<br>');
+  out = result.join('');
 
   // 3. Apply inline markdown (order matters — longer tokens first)
   out = out
@@ -367,6 +369,8 @@ function showNotification(notif) {
 
 function scheduleCardDismiss(card) {
   card.dismissTimer = setTimeout(() => {
+    clearTimeout(card.safetyTimer);
+    card.safetyTimer = null;
     card.classList.add('fade-out');
     setTimeout(() => {
       card.remove();

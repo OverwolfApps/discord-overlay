@@ -3,6 +3,21 @@ import { WindowsService } from '../../scripts/windows-service.js';
 
 const CLIENT_ID = '207646673902501888'; // Streamkit Client ID
 
+// Strip the Discord markdown subset to plain text — the shared Notifications app renders plain text,
+// not markdown, so **bold**/_italic_/`code` etc. shouldn't leak through as literal syntax.
+function stripMarkdown(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/\|\|(.+?)\|\|/g, '$1')   // spoiler
+    .replace(/\*\*(.+?)\*\*/g, '$1')   // bold
+    .replace(/__(.+?)__/g, '$1')       // underline
+    .replace(/~~(.+?)~~/g, '$1')       // strikethrough
+    .replace(/\*([^*]+)\*/g, '$1')     // italic *
+    .replace(/_([^_]+)_/g, '$1')       // italic _
+    .replace(/`([^`]+)`/g, '$1')       // inline code
+    .replace(/^#{1,3}\s+/gm, '');      // headings
+}
+
 class BackgroundController {
   constructor() {
     this.eventBus = new EventBus();
@@ -19,6 +34,8 @@ class BackgroundController {
       users: [],
       selfMute: false,
       selfDeaf: false,
+      selfStreaming: false,
+      selfVideo: false,
       soundboardSounds: []
     };
 
@@ -29,42 +46,64 @@ class BackgroundController {
       verticalOffset: parseInt(localStorage.getItem('verticalOffset') || '20', 10),
       notificationsEnabled: localStorage.getItem('notificationsEnabled') !== 'false',
       eventNotificationsEnabled: localStorage.getItem('eventNotificationsEnabled') !== 'false',
+      // Route notifications to the shared "Notifications" Overwolf app over its local HTTP endpoint
+      // instead of this app's own overlay. Off by default → unchanged behavior.
+      useExternalNotifications: localStorage.getItem('useExternalNotifications') === 'true',
+      externalNotificationsPort: parseInt(localStorage.getItem('externalNotificationsPort') || '61234', 10),
       notificationScale: parseFloat(localStorage.getItem('notificationScale') || '1.0'),
       notificationOpacity: parseFloat(localStorage.getItem('notificationOpacity') ?? '1.0'),
       maxNotifications: parseInt(localStorage.getItem('maxNotifications') || '5', 10),
       markdownEnabled: localStorage.getItem('markdownEnabled') !== 'false',
       overlayOnDesktop: localStorage.getItem('overlayOnDesktop') === 'true',
-      connectionMode: localStorage.getItem('connectionMode') || 'rpc' // 'rpc', 'bridge', 'mock'
+      connectionMode: localStorage.getItem('connectionMode') || 'rpc', // 'rpc', 'bridge', 'mock'
+      statusOverlayVisible: localStorage.getItem('statusOverlayVisible') !== 'false',
+      dashboardOverlayVisible: localStorage.getItem('dashboardOverlayVisible') !== 'false',
+      hudX: localStorage.getItem('hudX') !== null ? parseInt(localStorage.getItem('hudX'), 10) : null,
+      hudY: localStorage.getItem('hudY') !== null ? parseInt(localStorage.getItem('hudY'), 10) : null,
+      barX: localStorage.getItem('barX') !== null ? parseInt(localStorage.getItem('barX'), 10) : null,
+      barY: localStorage.getItem('barY') !== null ? parseInt(localStorage.getItem('barY'), 10) : null
     };
 
     this.ws = null;
     this.token = localStorage.getItem('discord_token') || null;
     this.reconnectTimeout = null;
     this.mockInterval = null;
-    this.overlayInteractive = false;
     this.typingTimers = {}; // userId → setTimeout handle for typing expiry
 
     // C# WebSocket Server Plugin
     this.bridgePlugin = null;
     this.bridgeUserId = null;
+
+    // Notifications that arrive before CHANNEL_JOINED is processed are queued
+    // and flushed once the channel state is ready.
+    this.pendingNotifications = [];
+    this.channelReady = false;
+    this.channelReadyFlushTimer = null;
   }
 
   async run() {
     // 1. Load initial settings
     this.eventBus.trigger('settings-changed', window.appSettings);
 
-    // 2. Initialize Overwolf window controllers & launch settings page on start
-    await WindowsService.restore('settings');
+    // 2. Initialize Overwolf window controllers
     await WindowsService.restore('notifications');
-    await WindowsService.setClickThrough('notifications', true);
     await WindowsService.setTopmost('notifications', true);
-    
-    // Check if game is already running or launches later
+
+    // Always open the HUD/dashboard immediately — they render on desktop and in-game alike.
+    // checkGameStatus will still close them if a game exits and overlayOnDesktop is off.
+    // Windows are never click-through: Overwolf's own in-game menu key already governs
+    // whether mouse input goes to the game or the overlay, so we don't manage that ourselves.
+    await WindowsService.restore('hud');
+    await WindowsService.changeSize('hud', 260, 400).catch(e => console.warn('changeSize hud failed', e));
+    await WindowsService.setTopmost('hud', true);
+    await WindowsService.restore('dashboard');
+    await WindowsService.changeSize('dashboard', 420, 360).catch(e => console.warn('changeSize dashboard failed', e));
+    await WindowsService.setTopmost('dashboard', true);
+    await this.positionOverlayWindows();
+
+    // Watch for game launch/exit to manage overlay visibility
     this.checkGameStatus();
     overwolf.games.onGameInfoUpdated.addListener(() => this.checkGameStatus());
-
-    // Register hotkeys
-    this.registerHotkeys();
 
     // Initialize C# Bridge Plugin for websocket mode
     this.initBridgePlugin();
@@ -81,6 +120,10 @@ class BackgroundController {
     window.changeConnectionMode = (mode) => this.changeConnectionMode(mode);
     window.triggerPreviewNotifications = () => this.triggerPreviewNotifications();
     window.clearPreviewNotifications = () => this.clearPreviewNotifications();
+    window.openSettings = () => this.openSettings();
+    window.startStream = (source) => this.startStream(source);
+    window.stopStream = () => this.stopStream();
+    window.toggleCamera = () => this.toggleCamera();
   }
 
   initBridgePlugin() {
@@ -89,7 +132,7 @@ class BackgroundController {
         if (result.status === "success") {
           this.bridgePlugin = result.object;
           this.bridgePlugin.OnMessage.addListener((msg) => this.handleBridgeMessage(msg));
-          this.bridgePlugin.OnStatus.addListener((status) => console.log("C# WS Server Status:", status));
+          this.bridgePlugin.OnStatus.addListener((status) => this.handleBridgeStatus(status));
           console.log("C# WebSocket Server Plugin loaded successfully.");
           if (window.appSettings.connectionMode === 'bridge') {
             this.startBridgeServer();
@@ -103,37 +146,88 @@ class BackgroundController {
     }
   }
 
-  registerHotkeys() {
-    overwolf.settings.hotkeys.onPressed.addListener(async (info) => {
-      if (info.name === 'toggle_overlay_interactive') {
-        this.overlayInteractive = !this.overlayInteractive;
-        try {
-          await WindowsService.setClickThrough('overlay', !this.overlayInteractive);
-          this.eventBus.trigger('overlay-interactive-changed', this.overlayInteractive);
-          console.log("Overlay interaction toggled:", this.overlayInteractive);
-        } catch (e) {
-          console.warn("Failed to set overlay clickthrough:", e);
-        }
-      }
-    });
+  // Clamp a window's top-left so it can't end up fully or mostly off-screen
+  // (guards against stale saved positions from before a window was resized).
+  clampToScreen(left, top, winW, winH) {
+    const availW = screen.availWidth || 1920;
+    const availH = screen.availHeight || 1080;
+    return {
+      left: Math.min(Math.max(left, 0), Math.max(0, availW - winW)),
+      top: Math.min(Math.max(top, 0), Math.max(0, availH - winH)),
+    };
+  }
+
+  // Position HUD and Dashboard windows on screen using saved drag coords or corner-based defaults
+  async positionOverlayWindows() {
+    const settings = window.appSettings;
+
+    if (settings.hudX !== null && settings.hudX !== undefined) {
+      const pos = this.clampToScreen(settings.hudX, settings.hudY, 260, 400);
+      await WindowsService.changePosition('hud', pos.left, pos.top)
+        .catch(e => console.warn('positionOverlayWindows: hud changePosition failed', e));
+    } else {
+      const offset = await this.getCornerPosition(settings.alignment, settings.horizontalOffset, settings.verticalOffset, 'hud');
+      await WindowsService.changePosition('hud', offset.left, offset.top)
+        .catch(e => console.warn('positionOverlayWindows: hud changePosition failed', e));
+    }
+
+    if (settings.barX !== null && settings.barX !== undefined) {
+      const pos = this.clampToScreen(settings.barX, settings.barY, 420, 360);
+      await WindowsService.changePosition('dashboard', pos.left, pos.top)
+        .catch(e => console.warn('positionOverlayWindows: dashboard changePosition failed', e));
+    } else {
+      const screenLeft = (screen.availWidth || 1920) / 2 - 210;
+      const screenTop = (screen.availHeight || 1080) - 380;
+      await WindowsService.changePosition('dashboard', Math.round(screenLeft), Math.round(screenTop))
+        .catch(e => console.warn('positionOverlayWindows: dashboard changePosition failed', e));
+    }
+  }
+
+  async getCornerPosition(alignment, hOffset, vOffset, windowName) {
+    const availW = screen.availWidth || 1920;
+    const availH = screen.availHeight || 1080;
+    const winW = windowName === 'hud' ? 260 : 420;
+    const winH = windowName === 'hud' ? 400 : 360;
+
+    switch (alignment) {
+      case 'topRight':
+        return { left: availW - winW - hOffset, top: vOffset };
+      case 'bottomLeft':
+        return { left: hOffset, top: availH - winH - vOffset };
+      case 'bottomRight':
+        return { left: availW - winW - hOffset, top: availH - winH - vOffset };
+      case 'topLeft':
+      default:
+        return { left: hOffset, top: vOffset };
+    }
   }
 
   async checkGameStatus() {
     overwolf.games.getRunningGameInfo(async (gameInfo) => {
       const isGameRunning = gameInfo && gameInfo.isRunning;
       const showOnDesktop = window.appSettings.overlayOnDesktop;
-      const overlayState = await WindowsService.getWindowState('overlay');
+
+      const hudState = await WindowsService.getWindowState('hud');
+      const dashState = await WindowsService.getWindowState('dashboard');
 
       if (isGameRunning || showOnDesktop) {
-        if (overlayState === 'closed' || overlayState === 'hidden') {
-          await WindowsService.restore('overlay');
-          await WindowsService.setClickThrough('overlay', !this.overlayInteractive);
-          await WindowsService.setTopmost('overlay', true);
+        let restored = false;
+        if (hudState === 'closed' || hudState === 'hidden') {
+          await WindowsService.restore('hud');
+          await WindowsService.changeSize('hud', 260, 400).catch(e => console.warn('changeSize hud failed', e));
+          await WindowsService.setTopmost('hud', true);
+          restored = true;
         }
+        if (dashState === 'closed' || dashState === 'hidden') {
+          await WindowsService.restore('dashboard');
+          await WindowsService.changeSize('dashboard', 420, 360).catch(e => console.warn('changeSize dashboard failed', e));
+          await WindowsService.setTopmost('dashboard', true);
+          restored = true;
+        }
+        if (restored) await this.positionOverlayWindows();
       } else {
-        if (overlayState !== 'closed') {
-          await WindowsService.close('overlay');
-        }
+        if (hudState !== 'closed') await WindowsService.close('hud');
+        if (dashState !== 'closed') await WindowsService.close('dashboard');
       }
     });
   }
@@ -154,6 +248,74 @@ class BackgroundController {
   changeConnectionMode(mode) {
     this.saveSettings({ connectionMode: mode });
     this.startActiveMode();
+  }
+
+  // Replace <@userId> and <@!userId> mentions with display names from voice state.
+  // Falls back to '@user' for unknown IDs so raw snowflakes never reach the UI.
+  resolveMentions(text) {
+    if (!text) return text;
+    return text.replace(/<@!?(\d+)>/g, (match, id) => {
+      const user = window.rpcState.users.find(u => u.id === id);
+      return user ? `@${user.username}` : '@user';
+    });
+  }
+
+  flushPendingNotifications() {
+    clearTimeout(this.channelReadyFlushTimer);
+    this.channelReadyFlushTimer = null;
+    this.channelReady = true;
+    for (const notif of this.pendingNotifications) {
+      this.sendNotification(notif);
+    }
+    this.pendingNotifications = [];
+  }
+
+  emitNotification(notif) {
+    notif = { ...notif, body: this.resolveMentions(notif.body), title: this.resolveMentions(notif.title) };
+    if (!this.channelReady) {
+      this.pendingNotifications.push(notif);
+      // Safety flush — if CHANNEL_JOINED never arrives, show after 2s
+      if (!this.channelReadyFlushTimer) {
+        this.channelReadyFlushTimer = setTimeout(() => this.flushPendingNotifications(), 2000);
+      }
+    } else {
+      this.sendNotification(notif);
+    }
+  }
+
+  // Single chokepoint for every real notification. When the user has enabled it, hand the
+  // notification to the shared "Notifications" app over HTTP; otherwise show it in this app's own
+  // overlay (the original behavior). Previews always stay local so tuning the overlay still works.
+  sendNotification(notif) {
+    if (window.appSettings.useExternalNotifications && !notif.isPreview) {
+      this.postExternalNotification(notif);
+    } else {
+      this.eventBus.trigger('notification', notif);
+    }
+  }
+
+  postExternalNotification(notif) {
+    const port = window.appSettings.externalNotificationsPort || 61234;
+    const icon = (notif.icon && (notif.icon.startsWith('http') || notif.icon.startsWith('overwolf-extension')))
+      ? notif.icon : undefined;
+    const payload = {
+      app: 'Discord',
+      title: notif.title || 'Discord',
+      message: stripMarkdown(notif.body || ''),
+      icon,
+      // Corner/timeout are left to the Notifications app so the USER controls placement there;
+      // this app just sends content.
+    };
+    fetch(`http://localhost:${port}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch((e) => {
+      // If the Notifications app isn't running/reachable, fall back to the local overlay so
+      // notifications are never silently dropped.
+      console.warn('[discord] external notify failed, using local overlay:', e && e.message);
+      this.eventBus.trigger('notification', notif);
+    });
   }
 
   startActiveMode() {
@@ -195,6 +357,8 @@ class BackgroundController {
     window.rpcState.authenticated = false;
     this.clearVoiceState();
     this.eventBus.trigger('state-updated', window.rpcState);
+    this.channelReady = false;
+    this.pendingNotifications = [];
   }
 
   async tryPorts(port) {
@@ -293,6 +457,7 @@ class BackgroundController {
           window.rpcState.channelName = msg.data.name;
           window.rpcState.users = msg.data.voice_states.map(vs => this.mapVoiceState(vs));
           this.eventBus.trigger('state-updated', window.rpcState);
+          this.flushPendingNotifications();
         }
       } else if (msg.cmd === 'GET_GUILD') {
         if (msg.data) {
@@ -399,7 +564,7 @@ class BackgroundController {
         break;
       case 'NOTIFICATION_CREATE':
         if (window.appSettings.notificationsEnabled) {
-          this.eventBus.trigger('notification', {
+          this.emitNotification({
             title: data.title || "Notification",
             body: data.body || "",
             icon: data.icon_url || ""
@@ -471,7 +636,7 @@ class BackgroundController {
   }
 
   triggerEventNotification(message, iconUrl) {
-    this.eventBus.trigger('notification', {
+    this.sendNotification({
       title: "Event Notification",
       body: message,
       icon: iconUrl || ""
@@ -589,11 +754,30 @@ class BackgroundController {
     window.rpcState.authenticated = false;
     this.clearVoiceState();
     this.eventBus.trigger('state-updated', window.rpcState);
+    this.channelReady = false;
+    this.pendingNotifications = [];
+  }
+
+  handleBridgeStatus(status) {
+    console.log("C# WS Server Status:", status);
+
+    // Handle client disconnect/error - clear voice state since we won't get CHANNEL_LEFT
+    if (status && (status.includes('disconnected') || status.includes('error'))) {
+      console.log("Client disconnected/error detected, clearing voice state");
+      this.clearVoiceState();
+      this.eventBus.trigger('state-updated', window.rpcState);
+      window.rpcState.connected = false;
+      window.rpcState.authenticated = false;
+      this.eventBus.trigger('connection-status', 'disconnected');
+      this.channelReady = false;
+      this.pendingNotifications = [];
+    }
   }
 
   handleBridgeMessage(messageStr) {
     try {
       const payload = JSON.parse(messageStr);
+      console.log("Bridge message received:", payload.cmd, JSON.stringify(payload));
 
       switch (payload.cmd) {
         case "REGISTER_CONFIG":
@@ -608,36 +792,58 @@ class BackgroundController {
           this.eventBus.trigger('connection-status', 'authenticated');
 
           if (payload.states && payload.states.length > 0) {
-            window.rpcState.channelId   = payload.channelId || payload.states[0].channelId || "0";
-            window.rpcState.guildId     = payload.guildId   || "";
-            window.rpcState.channelName = payload.channelName || "Voice Channel";
-            window.rpcState.guildName   = payload.guildName   || "Server";
+            // channelId comes from the payload top-level or the first state's channelId
+            window.rpcState.channelId   = payload.channelId   || payload.states[0].channelId || null;
+            window.rpcState.guildId     = payload.guildId     || "";
+            window.rpcState.channelName = payload.channelName || "";
+            window.rpcState.guildName   = payload.guildName   || "";
             window.rpcState.users = payload.states.map(s => this.mapBridgeVoiceState(s));
 
             const me = window.rpcState.users.find(u => u.id === this.bridgeUserId);
             if (me) {
-              window.rpcState.selfMute = me.mute;
-              window.rpcState.selfDeaf = me.deaf;
+              window.rpcState.selfMute      = me.mute;
+              window.rpcState.selfDeaf      = me.deaf;
+              window.rpcState.selfStreaming  = me.streaming;
+              window.rpcState.selfVideo      = me.video;
             }
           }
+          // Soundboard: bridge protocol doesn't carry it — clear any stale RPC sounds
+          window.rpcState.soundboardSounds = payload.soundboardSounds || [];
           this.eventBus.trigger('state-updated', window.rpcState);
+          // Channel state is now populated — flush any notifications that arrived
+          // before this message (bridge sends queued messages before CHANNEL_JOINED)
+          this.flushPendingNotifications();
           break;
         case "VOICE_STATE_UPDATE":
           if (payload.state) {
             const userState = payload.state;
-            
-            // Check left
-            if (!userState.channelId || userState.channelId === "0") {
+
+            // Mirror Orbolay's removal logic exactly:
+            // remove if channelId is JSON null, or if it's a different channel than the current one.
+            // An absent/undefined channelId means the field wasn't sent — treat as same-channel update.
+            const channelIdPresent = 'channelId' in userState;
+            const channelIdNull = channelIdPresent && userState.channelId === null;
+            const movedChannel = channelIdPresent && userState.channelId !== null && userState.channelId !== window.rpcState.channelId;
+            const shouldRemove = channelIdNull || movedChannel;
+
+            if (shouldRemove) {
               const leavingUser = window.rpcState.users.find(u => u.id === userState.userId);
               if (leavingUser) {
                 this.checkUserEventNotifications(leavingUser, null);
               }
               window.rpcState.users = window.rpcState.users.filter(u => u.id !== userState.userId);
             } else {
-              window.rpcState.channelId = userState.channelId;
               let user = window.rpcState.users.find(u => u.id === userState.userId);
               const mapped = this.mapBridgeVoiceState(userState);
+
               if (user) {
+                // Preserve fields not included in this partial update
+                if (mapped.username === null)   mapped.username   = user.username;
+                if (mapped.avatarUrl === null)  mapped.avatarUrl  = user.avatarUrl;
+                if (userState.streaming == null) mapped.streaming = user.streaming;
+                if (userState.speaking  == null) {
+                  mapped.speaking = (mapped.mute || mapped.deaf) ? false : user.speaking;
+                }
                 const prevUser = Object.assign({}, user);
                 Object.assign(user, mapped);
                 this.checkUserEventNotifications(prevUser, user);
@@ -647,8 +853,10 @@ class BackgroundController {
               }
 
               if (userState.userId === this.bridgeUserId) {
-                window.rpcState.selfMute = mapped.mute;
-                window.rpcState.selfDeaf = mapped.deaf;
+                window.rpcState.selfMute      = mapped.mute;
+                window.rpcState.selfDeaf      = mapped.deaf;
+                window.rpcState.selfStreaming  = mapped.streaming;
+                window.rpcState.selfVideo      = mapped.video;
               }
             }
             this.eventBus.trigger('state-updated', window.rpcState);
@@ -660,7 +868,7 @@ class BackgroundController {
           break;
         case "MESSAGE_NOTIFICATION":
           if (window.appSettings.notificationsEnabled && payload.message) {
-            this.eventBus.trigger('notification', {
+            this.emitNotification({
               title: payload.message.title || "Notification",
               body: payload.message.body || "",
               icon: payload.message.icon || ""
@@ -695,6 +903,9 @@ class BackgroundController {
           }, 10000);
           break;
         }
+        case "SPEAKING_UPDATE":
+          this.setSpeaking(payload.userId, payload.speaking);
+          break;
       }
     } catch(e) {
       console.error("Failed to parse bridge message:", e);
@@ -702,16 +913,20 @@ class BackgroundController {
   }
 
   mapBridgeVoiceState(s) {
+    // avatarUrl from the bridge is a bare hash, not a full URL
+    const avatarUrl = s.avatarUrl
+      ? `https://cdn.discordapp.com/avatars/${s.userId}/${s.avatarUrl}.png`
+      : null; // null = "not provided in this update", caller preserves existing
     return {
       id: s.userId,
-      username: s.username || "Unknown",
-      avatarUrl: s.avatarUrl ? `https://cdn.discordapp.com/avatars/${s.userId}/${s.avatarUrl}.png` : `https://cdn.discordapp.com/embed/avatars/${parseInt(s.userId, 10) % 5}.png`,
-      mute: s.mute || false,
-      deaf: s.deaf || false,
-      video: s.video || false,
-      streaming: s.streaming || false,
-      watching: s.watching || false,
-      speaking: s.speaking || false,
+      username: s.username || null,   // null = not provided, caller preserves existing
+      avatarUrl,
+      mute:      s.mute      ?? false,
+      deaf:      s.deaf      ?? false,
+      video:     s.video     ?? false,
+      streaming: s.streaming ?? false,
+      watching:  s.watching  ?? false,
+      speaking:  s.speaking  ?? false,
       typing: false
     };
   }
@@ -770,15 +985,68 @@ class BackgroundController {
     this.send('SELECT_VOICE_CHANNEL', { channel_id: null });
   }
 
+  async openSettings() {
+    const state = await WindowsService.getWindowState('settings').catch(() => 'closed');
+    if (state === 'normal' || state === 'maximized') {
+      await WindowsService.close('settings');
+    } else {
+      await WindowsService.restore('settings');
+    }
+  }
+
+  startStream(source) {
+    const mode = window.appSettings.connectionMode;
+    if (mode === 'mock') {
+      window.rpcState.selfStreaming = true;
+      const me = window.rpcState.users.find(u => u.id === '101');
+      if (me) me.streaming = true;
+      this.eventBus.trigger('state-updated', window.rpcState);
+      return;
+    }
+    if (mode === 'bridge') {
+      this.sendBridgeMessage({ cmd: "START_STREAM", source });
+      return;
+    }
+    console.warn("Stream start not supported in RPC mode.");
+  }
+
+  stopStream() {
+    const mode = window.appSettings.connectionMode;
+    if (mode === 'mock') {
+      window.rpcState.selfStreaming = false;
+      this.eventBus.trigger('state-updated', window.rpcState);
+      return;
+    }
+    if (mode === 'bridge') {
+      this.sendBridgeMessage({ cmd: "STOP_STREAM" });
+      return;
+    }
+    console.warn("Stream stop not supported in RPC mode.");
+  }
+
+  toggleCamera() {
+    const mode = window.appSettings.connectionMode;
+    if (mode === 'mock') {
+      window.rpcState.selfVideo = !window.rpcState.selfVideo;
+      this.eventBus.trigger('state-updated', window.rpcState);
+      return;
+    }
+    if (mode === 'bridge') {
+      this.sendBridgeMessage({ cmd: "TOGGLE_CAMERA" });
+      return;
+    }
+    console.warn("Camera toggle not supported in RPC mode.");
+  }
+
   playSound(soundId, guildId) {
     const mode = window.appSettings.connectionMode;
+    console.log(`playSound called: soundId=${soundId} guildId=${guildId} mode=${mode}`);
     if (mode === 'mock') {
       console.log(`Mock Sound Played: ${soundId}`);
       return;
     }
     if (mode === 'bridge') {
-      // Mod plugin does not handle playing soundboard sounds inside incoming commands
-      console.warn("Soundboard plays not supported in Equicord Bridge mode.");
+      this.sendBridgeMessage({ cmd: "PLAY_SOUNDBOARD_SOUND", soundId, guildId });
       return;
     }
     this.send('PLAY_SOUNDBOARD_SOUND', { sound_id: soundId, guild_id: guildId });
@@ -882,7 +1150,7 @@ class BackgroundController {
       }
 
       if (cycle % 12 === 0 && window.appSettings.notificationsEnabled) {
-        this.eventBus.trigger('notification', {
+        this.sendNotification({
           title: "New Message",
           body: `Bluscream: What's the plan for tonight?`,
           icon: "https://cdn.discordapp.com/embed/avatars/1.png"
