@@ -208,6 +208,12 @@ class BackgroundController {
       const isGameRunning = gameInfo && gameInfo.isRunning;
       const showOnDesktop = window.appSettings.overlayOnDesktop;
 
+      if (window.appSettings.closeOnGameExit && !isGameRunning) {
+        console.log('[discord-overlay] closeOnGameExit enabled and no game running. Shutting down.');
+        window.close();
+        return;
+      }
+
       const hudState = await WindowsService.getWindowState('hud');
       const dashState = await WindowsService.getWindowState('dashboard');
 
@@ -1290,6 +1296,22 @@ class BackgroundController {
         default: true
       },
       {
+        key: "autoLaunch",
+        label: "Start with Overwolf",
+        description: "Automatically start this app when the Overwolf client starts.",
+        type: "checkbox",
+        category: "Lifecycle",
+        default: true
+      },
+      {
+        key: "closeOnGameExit",
+        label: "Close on Game Exit",
+        description: "Shut down this app automatically when all games are closed.",
+        type: "checkbox",
+        category: "Lifecycle",
+        default: false
+      },
+      {
         key: "overlayOnDesktop",
         label: "Show Overlay on Desktop",
         description: "Maintain HUD visible when out of game.",
@@ -1393,18 +1415,24 @@ class BackgroundController {
               updated.notificationOpacity = parseFloat(vals.notificationOpacity) / 100;
             }
             if (vals.maxNotifications !== undefined) updated.maxNotifications = parseInt(vals.maxNotifications, 10);
-            if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
+             if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
             if (vals.overlayOnDesktop !== undefined) updated.overlayOnDesktop = vals.overlayOnDesktop !== false;
             if (vals.connectionMode !== undefined) updated.connectionMode = vals.connectionMode;
             if (vals.statusOverlayVisible !== undefined) updated.statusOverlayVisible = vals.statusOverlayVisible !== false;
             if (vals.dashboardOverlayVisible !== undefined) updated.dashboardOverlayVisible = vals.dashboardOverlayVisible !== false;
+            if (vals.autoLaunch !== undefined) updated.autoLaunch = vals.autoLaunch !== false;
+            if (vals.closeOnGameExit !== undefined) updated.closeOnGameExit = vals.closeOnGameExit === true;
+
+            if (vals.autoLaunch !== undefined) {
+              overwolf.settings.setExtensionSettings({ auto_launch_with_overwolf: vals.autoLaunch !== false }, () => {});
+            }
 
             Object.assign(window.appSettings, updated);
             for (const [key, val] of Object.entries(updated)) {
               localStorage.setItem(key, String(val));
             }
             this.eventBus.trigger('settings-changed', window.appSettings);
-            if ('overlayOnDesktop' in updated) {
+            if ('overlayOnDesktop' in updated || 'closeOnGameExit' in updated) {
               this.checkGameStatus();
             }
             this.positionOverlayWindows();

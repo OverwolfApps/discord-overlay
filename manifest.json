@@ -16,7 +16,8 @@
     "Hotkeys",
     "GameInfo",
     "Clipboard",
-    "DesktopStreaming"
+    "DesktopStreaming",
+    "Tray"
   ],
   "data": {
     "start_window": "background",
