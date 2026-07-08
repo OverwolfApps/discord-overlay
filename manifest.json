@@ -89,11 +89,6 @@
     },
     "game_targeting": {
       "type": "all"
-    },
-    "developer": {
-      "enable_auto_refresh": true,
-      "reload_delay": 1000,
-      "filter": "*.json;*.html;*.js;*.dll;*.css;*.ico;*.png"
     }
   }
 }
