@@ -1195,24 +1195,26 @@ class BackgroundController {
       },
       {
         key: "horizontalOffset",
-        label: "Horizontal Offset (px)",
+        label: "Horizontal Offset",
         description: "Margin from the left/right screen edges.",
         type: "slider",
         category: "Position",
         min: 0,
         max: 500,
         step: 5,
+        unit: "px",
         default: 20
       },
       {
         key: "verticalOffset",
-        label: "Vertical Offset (px)",
+        label: "Vertical Offset",
         description: "Margin from the top/bottom screen edges.",
         type: "slider",
         category: "Position",
         min: 0,
         max: 500,
         step: 5,
+        unit: "px",
         default: 20
       },
       {
@@ -1256,6 +1258,7 @@ class BackgroundController {
         min: 50,
         max: 200,
         step: 10,
+        unit: "%",
         default: 100
       },
       {
@@ -1267,6 +1270,7 @@ class BackgroundController {
         min: 10,
         max: 100,
         step: 5,
+        unit: "%",
         default: 100
       },
       {
