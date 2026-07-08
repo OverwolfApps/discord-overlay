@@ -1339,6 +1339,24 @@ class BackgroundController {
     overwolf.extensions.getExtensions((r) => {
       if (!r || !r.extensions) return;
       const sm = r.extensions.find(e => e.meta && e.meta.name === 'Settings Manager');
+      const notifApp = r.extensions.find(e => e.meta && e.meta.name === 'Notifications');
+
+      if (sm) {
+        overwolf.extensions.getRunningState(sm.id, (stateRes) => {
+          if (stateRes && !stateRes.isRunning) {
+            overwolf.extensions.launch(sm.id, { background: true });
+          }
+        });
+      }
+
+      if (notifApp) {
+        overwolf.extensions.getRunningState(notifApp.id, (stateRes) => {
+          if (stateRes && !stateRes.isRunning) {
+            overwolf.extensions.launch(notifApp.id, { background: true });
+          }
+        });
+      }
+
       if (!sm) return;
 
       const applyData = (infoStr) => {
