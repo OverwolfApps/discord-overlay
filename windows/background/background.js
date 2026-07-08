@@ -1330,11 +1330,19 @@ class BackgroundController {
       settings: schema
     };
 
-    fetch('http://localhost:61235/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(regData)
-    }).catch(() => {});
+    const register = () => {
+      fetch('http://localhost:61235/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(regData)
+      }).then(res => {
+        if (!res.ok) throw new Error();
+        console.log(`[discord-overlay] Registered schema successfully.`);
+      }).catch(() => {
+        setTimeout(register, 3000);
+      });
+    };
+    register();
 
     overwolf.extensions.getExtensions((r) => {
       if (!r || !r.extensions) return;
