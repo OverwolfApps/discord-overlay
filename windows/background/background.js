@@ -125,6 +125,16 @@ class BackgroundController {
     window.startStream = (source) => this.startStream(source);
     window.stopStream = () => this.stopStream();
     window.toggleCamera = () => this.toggleCamera();
+
+    overwolf.windows.onMessageReceived.addListener((msg) => {
+      if (msg.id === 'shutdown-app') {
+        console.log('[discord-overlay] Received shutdown command from Settings Manager.');
+        window.close();
+      } else if (msg.id === 'set-autostart') {
+        console.log('[discord-overlay] Received set-autostart command from Settings Manager:', msg.content.enabled);
+        overwolf.settings.setExtensionSettings({ auto_launch_with_overwolf: msg.content.enabled !== false }, () => {});
+      }
+    });
   }
 
   initBridgePlugin() {
@@ -1373,24 +1383,6 @@ class BackgroundController {
     overwolf.extensions.getExtensions((r) => {
       if (!r || !r.extensions) return;
       const sm = r.extensions.find(e => e.meta && e.meta.name === 'Settings Manager');
-      const notifApp = r.extensions.find(e => e.meta && e.meta.name === 'Notifications');
-
-      if (sm) {
-        overwolf.extensions.getRunningState(sm.id, (stateRes) => {
-          if (stateRes && !stateRes.isRunning) {
-            overwolf.extensions.launch(sm.id, { background: true });
-          }
-        });
-      }
-
-      if (notifApp) {
-        overwolf.extensions.getRunningState(notifApp.id, (stateRes) => {
-          if (stateRes && !stateRes.isRunning) {
-            overwolf.extensions.launch(notifApp.id, { background: true });
-          }
-        });
-      }
-
       if (!sm) return;
 
       const applyData = (infoStr) => {
@@ -1415,7 +1407,7 @@ class BackgroundController {
               updated.notificationOpacity = parseFloat(vals.notificationOpacity) / 100;
             }
             if (vals.maxNotifications !== undefined) updated.maxNotifications = parseInt(vals.maxNotifications, 10);
-             if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
+            if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
             if (vals.overlayOnDesktop !== undefined) updated.overlayOnDesktop = vals.overlayOnDesktop !== false;
             if (vals.connectionMode !== undefined) updated.connectionMode = vals.connectionMode;
             if (vals.statusOverlayVisible !== undefined) updated.statusOverlayVisible = vals.statusOverlayVisible !== false;
@@ -1423,16 +1415,12 @@ class BackgroundController {
             if (vals.autoLaunch !== undefined) updated.autoLaunch = vals.autoLaunch !== false;
             if (vals.closeOnGameExit !== undefined) updated.closeOnGameExit = vals.closeOnGameExit === true;
 
-            if (vals.autoLaunch !== undefined) {
-              overwolf.settings.setExtensionSettings({ auto_launch_with_overwolf: vals.autoLaunch !== false }, () => {});
-            }
-
             Object.assign(window.appSettings, updated);
             for (const [key, val] of Object.entries(updated)) {
               localStorage.setItem(key, String(val));
             }
             this.eventBus.trigger('settings-changed', window.appSettings);
-            if ('overlayOnDesktop' in updated || 'closeOnGameExit' in updated) {
+            if ('overlayOnDesktop' in updated) {
               this.checkGameStatus();
             }
             this.positionOverlayWindows();
