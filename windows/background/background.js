@@ -82,6 +82,7 @@ class BackgroundController {
   }
 
   async run() {
+    this.initCentralSettings();
     // 1. Load initial settings
     this.eventBus.trigger('settings-changed', window.appSettings);
 
@@ -243,6 +244,13 @@ class BackgroundController {
     if ('overlayOnDesktop' in newSettings) {
       this.checkGameStatus();
     }
+
+    // Sync back to central settings if active
+    fetch('http://localhost:61235/set?app=Discord%20Overlay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: newSettings })
+    }).catch(() => {});
   }
 
   changeConnectionMode(mode) {
@@ -1166,6 +1174,226 @@ class BackgroundController {
       clearInterval(this.mockInterval);
       this.mockInterval = null;
     }
+  }
+
+  initCentralSettings() {
+    const appName = "Discord Overlay";
+    const schema = [
+      {
+        key: "alignment",
+        label: "Overlay Alignment Corner",
+        description: "Default corner for HUD positioning.",
+        type: "select",
+        category: "Position",
+        options: [
+          { value: "topLeft", label: "Top Left" },
+          { value: "topRight", label: "Top Right" },
+          { value: "bottomLeft", label: "Bottom Left" },
+          { value: "bottomRight", label: "Bottom Right" }
+        ],
+        default: "topLeft"
+      },
+      {
+        key: "horizontalOffset",
+        label: "Horizontal Offset (px)",
+        description: "Margin from the left/right screen edges.",
+        type: "slider",
+        category: "Position",
+        min: 0,
+        max: 500,
+        step: 5,
+        default: 20
+      },
+      {
+        key: "verticalOffset",
+        label: "Vertical Offset (px)",
+        description: "Margin from the top/bottom screen edges.",
+        type: "slider",
+        category: "Position",
+        min: 0,
+        max: 500,
+        step: 5,
+        default: 20
+      },
+      {
+        key: "notificationsEnabled",
+        label: "Enable Voice Alerts",
+        description: "Show notifications for mute, deafen, and stream actions.",
+        type: "checkbox",
+        category: "Alerts",
+        default: true
+      },
+      {
+        key: "eventNotificationsEnabled",
+        label: "Enable Channel Event Alerts",
+        description: "Show notifications when users join or leave the voice channel.",
+        type: "checkbox",
+        category: "Alerts",
+        default: true
+      },
+      {
+        key: "useExternalNotifications",
+        label: "Use Shared Notifications App",
+        description: "Route all overlay toasts to the shared Notifications service instead of local overlays.",
+        type: "checkbox",
+        category: "Alerts",
+        default: true
+      },
+      {
+        key: "externalNotificationsPort",
+        label: "Notifications Service Port",
+        description: "Port where the shared Notifications server is listening.",
+        type: "number",
+        category: "Alerts",
+        default: 61234
+      },
+      {
+        key: "notificationScale",
+        label: "Alert Scale",
+        description: "Adjust sizing multiplier of the notification toasts.",
+        type: "slider",
+        category: "Appearance",
+        min: 50,
+        max: 200,
+        step: 10,
+        default: 100
+      },
+      {
+        key: "notificationOpacity",
+        label: "Alert Opacity",
+        description: "Adjust transparency of notification toasts.",
+        type: "slider",
+        category: "Appearance",
+        min: 10,
+        max: 100,
+        step: 5,
+        default: 100
+      },
+      {
+        key: "maxNotifications",
+        label: "Max Stacked Alerts",
+        description: "Maximum alerts visible simultaneously before evicting.",
+        type: "number",
+        category: "Appearance",
+        default: 5
+      },
+      {
+        key: "markdownEnabled",
+        label: "Enable Markdown in Chat",
+        description: "Parse bold, italics, code, and spoiler syntax in messages.",
+        type: "checkbox",
+        category: "Chat",
+        default: true
+      },
+      {
+        key: "overlayOnDesktop",
+        label: "Show Overlay on Desktop",
+        description: "Maintain HUD visible when out of game.",
+        type: "checkbox",
+        category: "General",
+        default: true
+      },
+      {
+        key: "connectionMode",
+        label: "Connection Mode",
+        description: "Choose interface layer (RPC, bridge server, or mock testing).",
+        type: "select",
+        category: "General",
+        options: [
+          { value: "rpc", label: "Discord RPC" },
+          { value: "bridge", label: "C# Bridge Server" },
+          { value: "mock", label: "Mock Mode (Testing)" }
+        ],
+        default: "rpc"
+      },
+      {
+        key: "statusOverlayVisible",
+        label: "Status Indicator HUD",
+        description: "Show connection status pill on screen.",
+        type: "checkbox",
+        category: "General",
+        default: true
+      },
+      {
+        key: "dashboardOverlayVisible",
+        label: "Control Dashboard HUD",
+        description: "Show audio/stream control widget.",
+        type: "checkbox",
+        category: "General",
+        default: true
+      }
+    ];
+
+    const regData = {
+      app: appName,
+      icon: "https://cdn.simpleicons.org/discord",
+      settings: schema
+    };
+
+    fetch('http://localhost:61235/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(regData)
+    }).catch(() => {});
+
+    overwolf.extensions.getExtensions((r) => {
+      if (!r || !r.extensions) return;
+      const sm = r.extensions.find(e => e.meta && e.meta.name === 'Settings Manager');
+      if (!sm) return;
+
+      const applyData = (infoStr) => {
+        try {
+          const apps = JSON.parse(infoStr);
+          if (apps && apps[appName] && apps[appName].values) {
+            const vals = apps[appName].values;
+            const updated = {};
+            
+            if (vals.alignment !== undefined) updated.alignment = vals.alignment;
+            if (vals.horizontalOffset !== undefined) updated.horizontalOffset = parseInt(vals.horizontalOffset, 10);
+            if (vals.verticalOffset !== undefined) updated.verticalOffset = parseInt(vals.verticalOffset, 10);
+            if (vals.notificationsEnabled !== undefined) updated.notificationsEnabled = vals.notificationsEnabled !== false;
+            if (vals.eventNotificationsEnabled !== undefined) updated.eventNotificationsEnabled = vals.eventNotificationsEnabled !== false;
+            if (vals.useExternalNotifications !== undefined) updated.useExternalNotifications = vals.useExternalNotifications !== false;
+            if (vals.externalNotificationsPort !== undefined) updated.externalNotificationsPort = parseInt(vals.externalNotificationsPort, 10);
+            
+            if (vals.notificationScale !== undefined) {
+              updated.notificationScale = parseFloat(vals.notificationScale) / 100;
+            }
+            if (vals.notificationOpacity !== undefined) {
+              updated.notificationOpacity = parseFloat(vals.notificationOpacity) / 100;
+            }
+            if (vals.maxNotifications !== undefined) updated.maxNotifications = parseInt(vals.maxNotifications, 10);
+            if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
+            if (vals.overlayOnDesktop !== undefined) updated.overlayOnDesktop = vals.overlayOnDesktop !== false;
+            if (vals.connectionMode !== undefined) updated.connectionMode = vals.connectionMode;
+            if (vals.statusOverlayVisible !== undefined) updated.statusOverlayVisible = vals.statusOverlayVisible !== false;
+            if (vals.dashboardOverlayVisible !== undefined) updated.dashboardOverlayVisible = vals.dashboardOverlayVisible !== false;
+
+            Object.assign(window.appSettings, updated);
+            for (const [key, val] of Object.entries(updated)) {
+              localStorage.setItem(key, String(val));
+            }
+            this.eventBus.trigger('settings-changed', window.appSettings);
+            if ('overlayOnDesktop' in updated) {
+              this.checkGameStatus();
+            }
+            this.positionOverlayWindows();
+          }
+        } catch (err) {
+          console.error('[discord-overlay] failed to parse settings:', err);
+        }
+      };
+
+      overwolf.extensions.getInfo(sm.id, (infoRes) => {
+        if (infoRes && infoRes.status === 'success' && infoRes.info) {
+          applyData(infoRes.info);
+        }
+      });
+
+      overwolf.extensions.registerInfo(sm.id, (infoUpdate) => {
+        if (infoUpdate) applyData(infoUpdate);
+      });
+    });
   }
 }
 

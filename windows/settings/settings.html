@@ -1,220 +1,138 @@
 <!DOCTYPE html>
 <html>
-
 <head>
   <meta charset="utf-8" />
   <title>Discord Overlay Settings</title>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    :root {
+      --bg: #0b0d13;
+      --panel: #111420;
+      --line: #22293b;
+      --text: #e6e9f0;
+      --muted: #848e9f;
+      --accent: #5865f2; /* Discord accent color */
+      --accent-hover: #7289da;
+      --warning: #ffcf5a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      user-select: none;
+      overflow: hidden;
+    }
+    .wrap {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      -webkit-app-region: drag;
+    }
+    header h1 {
+      font-size: 13px;
+      font-weight: 700;
+      margin: 0;
+      flex: 1;
+    }
+    .header-btn {
+      -webkit-app-region: no-drag;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    .header-btn:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+    }
+    main {
+      padding: 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 16px;
+      background: var(--panel);
+    }
+    .icon {
+      font-size: 40px;
+      color: var(--accent);
+    }
+    .redirect-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .redirect-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 280px;
+      margin: 0;
+    }
+    .btn-action {
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      outline: none;
+    }
+    .btn-action:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);
+    }
+    .btn-action:disabled {
+      background: var(--line);
+      color: var(--muted);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .warning-text {
+      font-size: 11px;
+      color: var(--warning);
+      margin-top: 4px;
+    }
+  </style>
 </head>
-
 <body>
-  <!-- Window Drag Handle and Header -->
-  <div class="header-bar" id="drag-handle">
-    <div class="app-title">DISCORD OVERLAY</div>
-    <div class="window-controls">
-      <button class="close-btn" id="close-btn" title="Close">
-        <svg viewBox="0 0 30 30" width="16" height="16">
-          <path
-            d="M15.71,15l4.15-4.15a.5.5,0,0,0-.71-.71L15,14.29l-4.15-4.15a.5.5,0,1,0-.71.71L14.29,15l-4.15,4.15a.5.5,0,1,0,.71.71L15,15.71l4.15,4.15a.5.5,0,1,0,.71-.71Z"
-            fill="currentColor" />
-        </svg>
-      </button>
-    </div>
+  <div class="wrap">
+    <header>
+      <h1>💬 Discord Overlay Settings</h1>
+      <button class="header-btn" id="close" title="Close">✕</button>
+    </header>
+    <main>
+      <div class="icon">⚙</div>
+      <h2 class="redirect-title">Settings Have Moved</h2>
+      <p class="redirect-desc">
+        Configuration settings for the Discord Overlay are now centralized inside the central Settings Manager dashboard.
+      </p>
+      <button class="btn-action" id="launch-btn" disabled>Open Settings Manager</button>
+      <div id="status-msg" class="warning-text">Checking Settings Manager status...</div>
+    </main>
   </div>
 
-  <div class="app-window">
-    <!-- Left Section: Configuration -->
-    <section class="left">
-      <article class="setting-group">
-        <h1>Overlay Configuration</h1>
-        <h2>Customize positioning and behavior in-game</h2>
-
-        <!-- Connection Mode Custom Dropdown -->
-        <div class="setting-row">
-          <span>Connection Mode</span>
-          <div class="custom-select" id="connection-mode-wrapper">
-            <div class="custom-select-trigger" id="connection-mode-trigger">
-              <span id="connection-mode-label">Discord RPC (Direct)</span>
-              <svg viewBox="0 0 24 24" width="12" height="12">
-                <path fill="currentColor" d="M7 10l5 5 5-5z" />
-              </svg>
-            </div>
-            <div class="custom-select-options" id="connection-mode-options">
-              <div class="custom-option" data-value="rpc">Discord RPC (Direct)</div>
-              <div class="custom-option" data-value="bridge">Equicord Bridge Server</div>
-              <div class="custom-option" data-value="mock">Demo / Mock Mode</div>
-            </div>
-          </div>
-          <!-- Hidden input to carry the value for JS compatibility -->
-          <input type="hidden" id="connection-mode" value="rpc" />
-        </div>
-
-        <!-- Notifications Toggle -->
-        <div class="setting-row">
-          <span>Message Notifications</span>
-          <div class="toggle">
-            <input type="checkbox" id="message-notifications-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-
-        <!-- Event Notifications Toggle -->
-        <div class="setting-row">
-          <span>Event Notifications</span>
-          <div class="toggle">
-            <input type="checkbox" id="event-notifications-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-
-        <!-- Route to the shared Notifications app instead of this app's own overlay -->
-        <div class="setting-row">
-          <span>Use Notifications app<br><small style="opacity:.6">Send to the shared Notifications overlay (HTTP)</small></span>
-          <div class="toggle">
-            <input type="checkbox" id="external-notifications-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-        <div class="setting-row" id="external-port-row">
-          <span>Notifications app port</span>
-          <input type="number" id="external-notifications-port" min="1" max="65535"
-                 style="width:90px;text-align:right;background:#1e2230;color:#e8ebf2;border:1px solid #3a4150;border-radius:6px;padding:4px 8px;">
-        </div>
-
-        <!-- Markdown Toggle -->
-        <div class="setting-row">
-          <span>Render Markdown</span>
-          <div class="toggle">
-            <input type="checkbox" id="markdown-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-
-        <!-- Desktop Overlay Toggle -->
-        <div class="setting-row">
-          <span>Show Overlay on Desktop</span>
-          <div class="toggle">
-            <input type="checkbox" id="desktop-overlay-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-
-        <!-- Status Overlay Toggle -->
-        <div class="setting-row">
-          <span>Status Overlay <span style="font-size:10px;opacity:0.5">(Voice HUD)</span></span>
-          <div class="toggle">
-            <input type="checkbox" id="status-overlay-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-
-        <!-- Dashboard Overlay Toggle -->
-        <div class="setting-row">
-          <span>Dashboard Overlay <span style="font-size:10px;opacity:0.5">(Controls Bar)</span></span>
-          <div class="toggle">
-            <input type="checkbox" id="dashboard-overlay-toggle" class="check">
-            <b class="switch"></b>
-            <b class="track"></b>
-          </div>
-        </div>
-      </article>
-
-      <!-- Overlay Screen Corner -->
-      <article class="setting-group">
-        <h1>Overlay Corner</h1>
-        <h2>Select screen placement corner</h2>
-        <form class="screen-corner-selector">
-          <label class="corner-box">
-            <input type="radio" name="screen-corner" value="topLeft" id="corner-tl" />
-            <span class="dot tl"></span>
-            <span class="label">Top-Left</span>
-          </label>
-          <label class="corner-box">
-            <input type="radio" name="screen-corner" value="topRight" id="corner-tr" />
-            <span class="dot tr"></span>
-            <span class="label">Top-Right</span>
-          </label>
-          <label class="corner-box">
-            <input type="radio" name="screen-corner" value="bottomLeft" id="corner-bl" />
-            <span class="dot bl"></span>
-            <span class="label">Bottom-Left</span>
-          </label>
-          <label class="corner-box">
-            <input type="radio" name="screen-corner" value="bottomRight" id="corner-br" />
-            <span class="dot br"></span>
-            <span class="label">Bottom-Right</span>
-          </label>
-        </form>
-      </article>
-
-      <!-- Offset Sliders -->
-      <article class="setting-group">
-        <div class="slider-wrapper">
-          <span id="slider-h-label">Horizontal Offset</span>
-          <div class="slider-container">
-            <input type="range" id="slider-horizontal" class="slider" min="0" max="400" value="20">
-            <input type="text" id="input-horizontal" class="input-slider" value="20" readonly>
-          </div>
-        </div>
-
-        <div class="slider-wrapper">
-          <span id="slider-v-label">Vertical Offset</span>
-          <div class="slider-container">
-            <input type="range" id="slider-vertical" class="slider" min="0" max="600" value="20">
-            <input type="text" id="input-vertical" class="input-slider" value="20" readonly>
-          </div>
-        </div>
-
-        <div class="slider-wrapper">
-          <span>Notification Scale</span>
-          <div class="slider-container">
-            <input type="range" id="slider-scale" class="slider" min="0.5" max="1.5" step="0.05" value="1.0">
-            <input type="text" id="input-scale" class="input-slider" value="1.00" readonly>
-          </div>
-        </div>
-
-        <div class="slider-wrapper">
-          <span>Max Notifications</span>
-          <div class="slider-container">
-            <input type="range" id="slider-max-notifs" class="slider" min="1" max="10" step="1" value="5">
-            <input type="text" id="input-max-notifs" class="input-slider" value="5" readonly>
-          </div>
-        </div>
-
-        <div class="slider-wrapper">
-          <span>Notification Opacity</span>
-          <div class="slider-container">
-            <input type="range" id="slider-opacity" class="slider" min="10" max="100" step="5" value="100">
-            <input type="text" id="input-opacity" class="input-slider" value="100%" readonly>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <!-- Right Section: Status & Soundboard -->
-    <section class="right">
-      <article class="state-panel">
-        <div class="state-header">
-          <h1>Live State</h1>
-          <span class="state-badge" id="state-badge">disconnected</span>
-        </div>
-        <pre class="state-viewer" id="state-viewer"></pre>
-      </article>
-    </section>
-  </div>
-
-  <!-- Toast Container for settings dashboard -->
-  <div class="toast-container" id="toast-container"
-    style="position: absolute; bottom: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 8px; pointer-events: none;">
-  </div>
-
-  <script type="module" src="settings.js"></script>
+  <script src="settings.js"></script>
 </body>
-
 </html>
