@@ -39,6 +39,13 @@ class BackgroundController {
       soundboardSounds: []
     };
 
+    let extPort = localStorage.getItem('externalNotificationsPort');
+    if (extPort === '61234') {
+      extPort = '60234';
+      localStorage.setItem('externalNotificationsPort', '60234');
+    }
+    const finalPort = parseInt(extPort || '60234', 10);
+
     // Global application settings (loaded from localStorage or defaults)
     window.appSettings = {
       alignment: localStorage.getItem('alignment') || 'topLeft',
@@ -49,7 +56,9 @@ class BackgroundController {
       // Route notifications to the shared "Notifications" Overwolf app over its local HTTP endpoint
       // instead of this app's own overlay. Off by default → unchanged behavior.
       useExternalNotifications: localStorage.getItem('useExternalNotifications') === 'true',
-      externalNotificationsPort: parseInt(localStorage.getItem('externalNotificationsPort') || '61234', 10),
+      externalNotificationsPort: finalPort,
+      disableHeader: localStorage.getItem('disableHeader') === 'true',
+      streamerMode: localStorage.getItem('streamerMode') === 'true',
       notificationScale: parseFloat(localStorage.getItem('notificationScale') || '1.0'),
       notificationOpacity: parseFloat(localStorage.getItem('notificationOpacity') ?? '1.0'),
       maxNotifications: parseInt(localStorage.getItem('maxNotifications') || '5', 10),
@@ -82,13 +91,12 @@ class BackgroundController {
   }
 
   async run() {
-    this.initCentralSettings();
+    // Settings registration happens via connectToSettingsManager() WebSocket (called in constructor)
     // 1. Load initial settings
     this.eventBus.trigger('settings-changed', window.appSettings);
 
     // 2. Initialize Overwolf window controllers
-    await WindowsService.restore('notifications');
-    await WindowsService.setTopmost('notifications', true);
+
 
     // Always open the HUD/dashboard immediately — they render on desktop and in-game alike.
     // checkGameStatus will still close them if a game exits and overlayOnDesktop is off.
@@ -126,15 +134,90 @@ class BackgroundController {
     window.stopStream = () => this.stopStream();
     window.toggleCamera = () => this.toggleCamera();
 
-    overwolf.windows.onMessageReceived.addListener((msg) => {
-      if (msg.id === 'shutdown-app') {
-        console.log('[discord-overlay] Received shutdown command from Settings Manager.');
-        window.close();
-      } else if (msg.id === 'set-autostart') {
-        console.log('[discord-overlay] Received set-autostart command from Settings Manager:', msg.content.enabled);
-        overwolf.settings.setExtensionSettings({ auto_launch_with_overwolf: msg.content.enabled !== false }, () => {});
-      }
-    });
+    this.smWs = null;
+    this.connectToSettingsManager();
+  }
+
+  connectToSettingsManager() {
+    const appName = 'Discord Overlay';
+    const schema = [
+      { key: "notificationsEnabled", label: "Enable Voice Alerts", description: "Show notifications for mute, deafen, and stream actions.", type: "checkbox", category: "Alerts", default: true },
+      { key: "eventNotificationsEnabled", label: "Enable Channel Event Alerts", description: "Show notifications when users join or leave the voice channel.", type: "checkbox", category: "Alerts", default: true },
+      { key: "externalNotificationsPort", label: "Notifications Service Port", description: "Port where the shared Notifications server is listening.", type: "number", category: "Alerts", default: 60234 },
+      { key: "markdownEnabled", label: "Enable Markdown in Chat", description: "Parse bold, italics, code, and spoiler syntax in messages.", type: "checkbox", category: "Chat", default: true },
+      { key: "autoLaunch", label: "Start with Overwolf", description: "Automatically start this app when the Overwolf client starts.", type: "checkbox", category: "Lifecycle", default: true },
+      { key: "closeOnGameExit", label: "Close on Game Exit", description: "Shut down this app automatically when all games are closed.", type: "checkbox", category: "Lifecycle", default: false },
+      { key: "overlayOnDesktop", label: "Show Overlay on Desktop", description: "Maintain HUD visible when out of game.", type: "checkbox", category: "General", default: true },
+      { key: "disableHeader", label: "Hide HUD Header", description: "Fully disable the header part with server and channel name.", type: "checkbox", category: "Appearance", default: false },
+      { key: "streamerMode", label: "Streamer Mode", description: "Obfuscate user profile pictures and usernames on the HUD.", type: "checkbox", category: "General", default: false },
+      { key: "connectionMode", label: "Connection Mode", description: "Choose interface layer (RPC, bridge server, or mock testing).", type: "select", category: "General", options: [{ value: "rpc", label: "Discord RPC" }, { value: "bridge", label: "C# Bridge Server" }, { value: "mock", label: "Mock Mode (Testing)" }], default: "rpc" },
+      { key: "statusOverlayVisible", label: "Status Indicator HUD", description: "Show connection status pill on screen.", type: "checkbox", category: "General", default: true },
+      { key: "dashboardOverlayVisible", label: "Control Dashboard HUD", description: "Show audio/stream control widget.", type: "checkbox", category: "General", default: true }
+    ];
+    try {
+      this.smWs = new WebSocket('ws://127.0.0.1:60236');
+      this.smWs.onopen = () => {
+        console.log('[discord-overlay] Connected to Settings Manager WebSocket.');
+        this.smWs.send(JSON.stringify({ event: 'register', app: appName, icon: 'icons/IconMouseOver.png', settings: schema }));
+      };
+      this.smWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.event === 'settings-changed' && data.app === appName) {
+            console.log('[discord-overlay] WS Settings update received:', JSON.stringify(data.values));
+            this.applySettingsUpdate(data.values);
+          }
+        } catch (e) {
+          console.error('[discord-overlay] Error parsing WS message:', e);
+        }
+      };
+      this.smWs.onclose = () => {
+        console.warn('[discord-overlay] Settings Manager WS disconnected. Reconnecting in 5s...');
+        setTimeout(() => this.connectToSettingsManager(), 5000);
+      };
+      this.smWs.onerror = () => {
+        if (this.smWs) this.smWs.close();
+      };
+    } catch (err) {
+      console.error('[discord-overlay] failed to connect to Settings Manager WS:', err);
+      setTimeout(() => this.connectToSettingsManager(), 5000);
+    }
+  }
+
+  applySettingsUpdate(vals) {
+    if (!vals) return;
+    const updated = {};
+    if (vals.alignment !== undefined) updated.alignment = vals.alignment;
+    if (vals.horizontalOffset !== undefined) updated.horizontalOffset = parseInt(vals.horizontalOffset, 10);
+    if (vals.verticalOffset !== undefined) updated.verticalOffset = parseInt(vals.verticalOffset, 10);
+    if (vals.notificationsEnabled !== undefined) updated.notificationsEnabled = vals.notificationsEnabled !== false;
+    if (vals.eventNotificationsEnabled !== undefined) updated.eventNotificationsEnabled = vals.eventNotificationsEnabled !== false;
+    if (vals.externalNotificationsPort !== undefined) updated.externalNotificationsPort = parseInt(vals.externalNotificationsPort, 10);
+    if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
+    if (vals.overlayOnDesktop !== undefined) updated.overlayOnDesktop = vals.overlayOnDesktop !== false;
+    if (vals.connectionMode !== undefined) updated.connectionMode = vals.connectionMode;
+    if (vals.statusOverlayVisible !== undefined) updated.statusOverlayVisible = vals.statusOverlayVisible !== false;
+    if (vals.dashboardOverlayVisible !== undefined) updated.dashboardOverlayVisible = vals.dashboardOverlayVisible !== false;
+    if (vals.autoLaunch !== undefined) updated.autoLaunch = vals.autoLaunch !== false;
+    if (vals.closeOnGameExit !== undefined) updated.closeOnGameExit = vals.closeOnGameExit === true;
+    if (vals.disableHeader !== undefined) updated.disableHeader = vals.disableHeader === true;
+    if (vals.streamerMode !== undefined) updated.streamerMode = vals.streamerMode === true;
+
+    const oldConnectionMode = window.appSettings.connectionMode;
+    const oldOverlayOnDesktop = window.appSettings.overlayOnDesktop;
+
+    Object.assign(window.appSettings, updated);
+    for (const [key, val] of Object.entries(updated)) {
+      localStorage.setItem(key, String(val));
+    }
+    this.eventBus.trigger('settings-changed', window.appSettings);
+    if ('connectionMode' in updated && updated.connectionMode !== oldConnectionMode) {
+      this.startActiveMode();
+    }
+    if ('overlayOnDesktop' in updated && updated.overlayOnDesktop !== oldOverlayOnDesktop) {
+      this.checkGameStatus();
+    }
+    this.positionOverlayWindows();
   }
 
   initBridgePlugin() {
@@ -261,12 +344,11 @@ class BackgroundController {
       this.checkGameStatus();
     }
 
-    // Sync back to central settings if active
-    fetch('http://localhost:61235/set?app=Discord%20Overlay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: newSettings })
-    }).catch(() => {});
+    // Sync back to Settings Manager via WebSocket
+    if (this.smWs && this.smWs.readyState === WebSocket.OPEN) {
+      console.log('[discord-overlay] Sending WS set event to update settings:', newSettings);
+      this.smWs.send(JSON.stringify({ event: 'set', app: 'Discord Overlay', values: newSettings }));
+    }
   }
 
   changeConnectionMode(mode) {
@@ -311,7 +393,7 @@ class BackgroundController {
   // notification to the shared "Notifications" app over HTTP; otherwise show it in this app's own
   // overlay (the original behavior). Previews always stay local so tuning the overlay still works.
   sendNotification(notif) {
-    if (window.appSettings.useExternalNotifications && !notif.isPreview) {
+    if (!notif.isPreview && window.appSettings.useExternalNotifications) {
       this.postExternalNotification(notif);
     } else {
       this.eventBus.trigger('notification', notif);
@@ -319,7 +401,8 @@ class BackgroundController {
   }
 
   postExternalNotification(notif) {
-    const port = window.appSettings.externalNotificationsPort || 61234;
+    const port = window.appSettings.externalNotificationsPort || 60234;
+    console.log(`[discord] postExternalNotification attempting port: ${port}`);
     const icon = (notif.icon && (notif.icon.startsWith('http') || notif.icon.startsWith('overwolf-extension')))
       ? notif.icon : undefined;
     const payload = {
@@ -327,18 +410,13 @@ class BackgroundController {
       title: notif.title || 'Discord',
       message: stripMarkdown(notif.body || ''),
       icon,
-      // Corner/timeout are left to the Notifications app so the USER controls placement there;
-      // this app just sends content.
     };
     fetch(`http://localhost:${port}/notify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch((e) => {
-      // If the Notifications app isn't running/reachable, fall back to the local overlay so
-      // notifications are never silently dropped.
-      console.warn('[discord] external notify failed, using local overlay:', e && e.message);
-      this.eventBus.trigger('notification', notif);
+      console.warn('[discord] external notify failed:', e && e.message);
     });
   }
 
@@ -454,6 +532,9 @@ class BackgroundController {
           console.log("Authenticated successfully via RPC!");
           window.rpcState.authenticated = true;
           this.eventBus.trigger('connection-status', 'authenticated');
+          if (msg.data && msg.data.user && msg.data.user.id) {
+            this.bridgeUserId = msg.data.user.id;
+          }
           
           this.send('SUBSCRIBE', {}, 'VOICE_CHANNEL_SELECT');
           this.send('GET_SELECTED_VOICE_CHANNEL');
@@ -625,36 +706,60 @@ class BackgroundController {
   }
 
   checkUserEventNotifications(prev, curr) {
-    if (!window.appSettings.eventNotificationsEnabled) return;
-
     const channelName = window.rpcState.channelName ? `#${window.rpcState.channelName}` : 'the channel';
 
     // 1. User Joined
     if (!prev && curr) {
-      this.triggerEventNotification(`@${curr.username} joined ${channelName}`, curr.avatarUrl);
+      if (window.appSettings.eventNotificationsEnabled) {
+        this.triggerEventNotification(`@${curr.username} joined ${channelName}`, curr.avatarUrl);
+      }
     }
     // 2. User Left
     else if (prev && !curr) {
-      this.triggerEventNotification(`@${prev.username} left ${channelName}`, prev.avatarUrl);
+      if (window.appSettings.eventNotificationsEnabled) {
+        this.triggerEventNotification(`@${prev.username} left ${channelName}`, prev.avatarUrl);
+      }
     }
-    // 3. Status changes (streaming, video)
+    // 3. Status changes (streaming, video, mute, deaf, typing)
     else if (prev && curr) {
-      if (!prev.streaming && curr.streaming) {
-        this.triggerEventNotification(`@${curr.username} started streaming`, curr.avatarUrl);
-      } else if (prev.streaming && !curr.streaming) {
-        this.triggerEventNotification(`@${curr.username} stopped streaming`, curr.avatarUrl);
+      const isMe = curr.id === this.bridgeUserId;
+
+      if (window.appSettings.eventNotificationsEnabled) {
+        if (!prev.video && curr.video) {
+          this.triggerEventNotification(`@${curr.username} enabled their camera`, curr.avatarUrl);
+        } else if (prev.video && !curr.video) {
+          this.triggerEventNotification(`@${curr.username} disabled their camera`, curr.avatarUrl);
+        }
+
+        if (!prev.typing && curr.typing) {
+          this.triggerEventNotification(`@${curr.username} started typing`, curr.avatarUrl);
+        } else if (prev.typing && !curr.typing) {
+          this.triggerEventNotification(`@${curr.username} stopped typing`, curr.avatarUrl);
+        }
       }
 
-      if (!prev.video && curr.video) {
-        this.triggerEventNotification(`@${curr.username} enabled their camera`, curr.avatarUrl);
-      } else if (prev.video && !curr.video) {
-        this.triggerEventNotification(`@${curr.username} disabled their camera`, curr.avatarUrl);
-      }
+      if (window.appSettings.notificationsEnabled) {
+        if (!prev.streaming && curr.streaming) {
+          this.triggerEventNotification(`@${curr.username} started streaming`, curr.avatarUrl);
+        } else if (prev.streaming && !curr.streaming) {
+          this.triggerEventNotification(`@${curr.username} stopped streaming`, curr.avatarUrl);
+        }
 
-      if (!prev.typing && curr.typing) {
-        this.triggerEventNotification(`@${curr.username} started typing`, curr.avatarUrl);
-      } else if (prev.typing && !curr.typing) {
-        this.triggerEventNotification(`@${curr.username} stopped typing`, curr.avatarUrl);
+        if (!prev.mute && curr.mute) {
+          const msg = isMe ? "You muted yourself" : `@${curr.username} muted themselves`;
+          this.triggerEventNotification(msg, curr.avatarUrl);
+        } else if (prev.mute && !curr.mute) {
+          const msg = isMe ? "You unmuted yourself" : `@${curr.username} unmuted themselves`;
+          this.triggerEventNotification(msg, curr.avatarUrl);
+        }
+
+        if (!prev.deaf && curr.deaf) {
+          const msg = isMe ? "You deafened yourself" : `@${curr.username} deafened themselves`;
+          this.triggerEventNotification(msg, curr.avatarUrl);
+        } else if (prev.deaf && !curr.deaf) {
+          const msg = isMe ? "You undeafened yourself" : `@${curr.username} undeafened themselves`;
+          this.triggerEventNotification(msg, curr.avatarUrl);
+        }
       }
     }
   }
@@ -1081,6 +1186,7 @@ class BackgroundController {
     this.stopMockSimulation();
     console.log("Mock Mode Simulation Started");
 
+    this.bridgeUserId = "101"; // Default mockup user (Bluscream)
     window.rpcState.connected = true;
     window.rpcState.authenticated = true;
     window.rpcState.channelName = "Gaming General";
@@ -1171,6 +1277,34 @@ class BackgroundController {
           user.typing = false;
           this.checkUserEventNotifications(prev, user);
         }
+      } else if (cycle === 34) {
+        const user = window.rpcState.users.find(u => u.id === "100");
+        if (user) {
+          const prev = { ...user };
+          user.mute = true;
+          this.checkUserEventNotifications(prev, user);
+        }
+      } else if (cycle === 38) {
+        const user = window.rpcState.users.find(u => u.id === "100");
+        if (user) {
+          const prev = { ...user };
+          user.mute = false;
+          this.checkUserEventNotifications(prev, user);
+        }
+      } else if (cycle === 42) {
+        const user = window.rpcState.users.find(u => u.id === "101");
+        if (user) {
+          const prev = { ...user };
+          user.mute = true;
+          this.checkUserEventNotifications(prev, user);
+        }
+      } else if (cycle === 46) {
+        const user = window.rpcState.users.find(u => u.id === "101");
+        if (user) {
+          const prev = { ...user };
+          user.mute = false;
+          this.checkUserEventNotifications(prev, user);
+        }
       }
 
       if (cycle % 12 === 0 && window.appSettings.notificationsEnabled) {
@@ -1192,255 +1326,7 @@ class BackgroundController {
     }
   }
 
-  initCentralSettings() {
-    const appName = "Discord Overlay";
-    const schema = [
-      {
-        key: "alignment",
-        label: "Overlay Alignment Corner",
-        description: "Default corner for HUD positioning.",
-        type: "select",
-        category: "Position",
-        options: [
-          { value: "topLeft", label: "Top Left" },
-          { value: "topRight", label: "Top Right" },
-          { value: "bottomLeft", label: "Bottom Left" },
-          { value: "bottomRight", label: "Bottom Right" }
-        ],
-        default: "topLeft"
-      },
-      {
-        key: "horizontalOffset",
-        label: "Horizontal Offset",
-        description: "Margin from the left/right screen edges.",
-        type: "slider",
-        category: "Position",
-        min: 0,
-        max: 500,
-        step: 5,
-        unit: "px",
-        default: 20
-      },
-      {
-        key: "verticalOffset",
-        label: "Vertical Offset",
-        description: "Margin from the top/bottom screen edges.",
-        type: "slider",
-        category: "Position",
-        min: 0,
-        max: 500,
-        step: 5,
-        unit: "px",
-        default: 20
-      },
-      {
-        key: "notificationsEnabled",
-        label: "Enable Voice Alerts",
-        description: "Show notifications for mute, deafen, and stream actions.",
-        type: "checkbox",
-        category: "Alerts",
-        default: true
-      },
-      {
-        key: "eventNotificationsEnabled",
-        label: "Enable Channel Event Alerts",
-        description: "Show notifications when users join or leave the voice channel.",
-        type: "checkbox",
-        category: "Alerts",
-        default: true
-      },
-      {
-        key: "useExternalNotifications",
-        label: "Use Shared Notifications App",
-        description: "Route all overlay toasts to the shared Notifications service instead of local overlays.",
-        type: "checkbox",
-        category: "Alerts",
-        default: true
-      },
-      {
-        key: "externalNotificationsPort",
-        label: "Notifications Service Port",
-        description: "Port where the shared Notifications server is listening.",
-        type: "number",
-        category: "Alerts",
-        default: 61234
-      },
-      {
-        key: "notificationScale",
-        label: "Alert Scale",
-        description: "Adjust sizing multiplier of the notification toasts.",
-        type: "slider",
-        category: "Appearance",
-        min: 50,
-        max: 200,
-        step: 10,
-        unit: "%",
-        default: 100
-      },
-      {
-        key: "notificationOpacity",
-        label: "Alert Opacity",
-        description: "Adjust transparency of notification toasts.",
-        type: "slider",
-        category: "Appearance",
-        min: 10,
-        max: 100,
-        step: 5,
-        unit: "%",
-        default: 100
-      },
-      {
-        key: "maxNotifications",
-        label: "Max Stacked Alerts",
-        description: "Maximum alerts visible simultaneously before evicting.",
-        type: "number",
-        category: "Appearance",
-        default: 5
-      },
-      {
-        key: "markdownEnabled",
-        label: "Enable Markdown in Chat",
-        description: "Parse bold, italics, code, and spoiler syntax in messages.",
-        type: "checkbox",
-        category: "Chat",
-        default: true
-      },
-      {
-        key: "autoLaunch",
-        label: "Start with Overwolf",
-        description: "Automatically start this app when the Overwolf client starts.",
-        type: "checkbox",
-        category: "Lifecycle",
-        default: true
-      },
-      {
-        key: "closeOnGameExit",
-        label: "Close on Game Exit",
-        description: "Shut down this app automatically when all games are closed.",
-        type: "checkbox",
-        category: "Lifecycle",
-        default: false
-      },
-      {
-        key: "overlayOnDesktop",
-        label: "Show Overlay on Desktop",
-        description: "Maintain HUD visible when out of game.",
-        type: "checkbox",
-        category: "General",
-        default: true
-      },
-      {
-        key: "connectionMode",
-        label: "Connection Mode",
-        description: "Choose interface layer (RPC, bridge server, or mock testing).",
-        type: "select",
-        category: "General",
-        options: [
-          { value: "rpc", label: "Discord RPC" },
-          { value: "bridge", label: "C# Bridge Server" },
-          { value: "mock", label: "Mock Mode (Testing)" }
-        ],
-        default: "rpc"
-      },
-      {
-        key: "statusOverlayVisible",
-        label: "Status Indicator HUD",
-        description: "Show connection status pill on screen.",
-        type: "checkbox",
-        category: "General",
-        default: true
-      },
-      {
-        key: "dashboardOverlayVisible",
-        label: "Control Dashboard HUD",
-        description: "Show audio/stream control widget.",
-        type: "checkbox",
-        category: "General",
-        default: true
-      }
-    ];
-
-    const regData = {
-      app: appName,
-      icon: "https://cdn.simpleicons.org/discord",
-      settings: schema
-    };
-
-    const register = () => {
-      fetch('http://localhost:61235/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(regData)
-      }).then(res => {
-        if (!res.ok) throw new Error();
-        console.log(`[discord-overlay] Registered schema successfully.`);
-      }).catch(() => {
-        setTimeout(register, 3000);
-      });
-    };
-    register();
-
-    overwolf.extensions.getExtensions((r) => {
-      if (!r || !r.extensions) return;
-      const sm = r.extensions.find(e => e.meta && e.meta.name === 'Settings Manager');
-      if (!sm) return;
-
-      const applyData = (infoStr) => {
-        try {
-          const apps = JSON.parse(infoStr);
-          if (apps && apps[appName] && apps[appName].values) {
-            const vals = apps[appName].values;
-            const updated = {};
-            
-            if (vals.alignment !== undefined) updated.alignment = vals.alignment;
-            if (vals.horizontalOffset !== undefined) updated.horizontalOffset = parseInt(vals.horizontalOffset, 10);
-            if (vals.verticalOffset !== undefined) updated.verticalOffset = parseInt(vals.verticalOffset, 10);
-            if (vals.notificationsEnabled !== undefined) updated.notificationsEnabled = vals.notificationsEnabled !== false;
-            if (vals.eventNotificationsEnabled !== undefined) updated.eventNotificationsEnabled = vals.eventNotificationsEnabled !== false;
-            if (vals.useExternalNotifications !== undefined) updated.useExternalNotifications = vals.useExternalNotifications !== false;
-            if (vals.externalNotificationsPort !== undefined) updated.externalNotificationsPort = parseInt(vals.externalNotificationsPort, 10);
-            
-            if (vals.notificationScale !== undefined) {
-              updated.notificationScale = parseFloat(vals.notificationScale) / 100;
-            }
-            if (vals.notificationOpacity !== undefined) {
-              updated.notificationOpacity = parseFloat(vals.notificationOpacity) / 100;
-            }
-            if (vals.maxNotifications !== undefined) updated.maxNotifications = parseInt(vals.maxNotifications, 10);
-            if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
-            if (vals.overlayOnDesktop !== undefined) updated.overlayOnDesktop = vals.overlayOnDesktop !== false;
-            if (vals.connectionMode !== undefined) updated.connectionMode = vals.connectionMode;
-            if (vals.statusOverlayVisible !== undefined) updated.statusOverlayVisible = vals.statusOverlayVisible !== false;
-            if (vals.dashboardOverlayVisible !== undefined) updated.dashboardOverlayVisible = vals.dashboardOverlayVisible !== false;
-            if (vals.autoLaunch !== undefined) updated.autoLaunch = vals.autoLaunch !== false;
-            if (vals.closeOnGameExit !== undefined) updated.closeOnGameExit = vals.closeOnGameExit === true;
-
-            Object.assign(window.appSettings, updated);
-            for (const [key, val] of Object.entries(updated)) {
-              localStorage.setItem(key, String(val));
-            }
-            this.eventBus.trigger('settings-changed', window.appSettings);
-            if ('overlayOnDesktop' in updated) {
-              this.checkGameStatus();
-            }
-            this.positionOverlayWindows();
-          }
-        } catch (err) {
-          console.error('[discord-overlay] failed to parse settings:', err);
-        }
-      };
-
-      overwolf.extensions.getInfo(sm.id, (infoRes) => {
-        if (infoRes && infoRes.status === 'success' && infoRes.info) {
-          applyData(infoRes.info);
-        }
-      });
-
-      overwolf.extensions.registerInfo(sm.id, (infoUpdate) => {
-        if (infoUpdate) applyData(infoUpdate);
-      });
-    });
-  }
+  // initCentralSettings handled via connectToSettingsManager() WebSocket in constructor
 }
 
 // Instantiate and run controller

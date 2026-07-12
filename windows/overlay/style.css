@@ -46,7 +46,8 @@ body {
 
 .hud-header {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 6px;
 }
@@ -99,13 +100,13 @@ body {
   border-radius: 50%;
   background: #1e293b;
   border: 1.5px solid rgba(255, 255, 255, 0.15);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Active Speaker Ring */
 .user-row.speaking .user-avatar {
-  border-color: #00ff80;
-  box-shadow: 0 0 10px rgba(0, 255, 128, 0.5);
+  border-color: #23a55a;
+  box-shadow: 0 0 0 2px #23a55a, 0 0 14px rgba(35, 165, 90, 0.9);
 }
 
 /* Voice Flags Overlays */
@@ -113,8 +114,8 @@ body {
   position: absolute;
   bottom: -2px;
   right: -2px;
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -132,8 +133,8 @@ body {
 }
 
 .status-badge svg {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 .user-name {
@@ -168,8 +169,8 @@ body {
 }
 
 .flag-badge svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Camera on — Discord green */
@@ -198,13 +199,13 @@ body {
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 13px;
+  height: 16px;
 }
 
 .typing-dots span {
   display: block;
-  width: 3px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: currentColor;
   animation: typing-bounce 1.2s ease-in-out infinite;
@@ -542,4 +543,28 @@ body {
 @keyframes slideOut {
   from { transform: translateX(0); }
   to { transform: translateX(120%); }
+}
+
+/* --- STREAMER MODE --- */
+.user-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  transition: border-color 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  padding: 4px;
+  color: #ffffff;
+}
+
+.user-row.speaking .user-avatar-placeholder {
+  border-color: #23a55a;
+  box-shadow: 0 0 0 2px #23a55a, 0 0 14px rgba(35, 165, 90, 0.9);
+}
+
+.blurred-text {
+  filter: blur(4.5px);
+  display: inline-block;
+  user-select: none;
+  pointer-events: none;
+  letter-spacing: 2px;
 }

@@ -19,7 +19,7 @@ els.close.onclick = () => {
 function checkSettingsManager() {
   overwolf.extensions.getExtensions((r) => {
     if (r && r.extensions) {
-      const sm = r.extensions.find(e => e.meta && e.meta.name === 'Settings Manager');
+      const sm = r.extensions.find(e => e.meta && e.meta.name === 'Settings (API)');
       if (sm) {
         settingsManagerId = sm.id;
         els.launchBtn.disabled = false;

@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 
-namespace DiscordOverlay
+namespace WebSocketServer
 {
     public class WebSocketServerPlugin
     {

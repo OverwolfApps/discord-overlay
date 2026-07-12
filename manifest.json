@@ -17,7 +17,8 @@
     "GameInfo",
     "Clipboard",
     "DesktopStreaming",
-    "Tray"
+    "Tray",
+    "Extensions"
   ],
   "data": {
     "start_window": "background",
@@ -26,8 +27,8 @@
     },
     "extra-objects": {
       "websocket-server-plugin": {
-        "file": "plugins/DiscordOverlayWebSocketServer.dll",
-        "class": "DiscordOverlay.WebSocketServerPlugin"
+        "file": "plugins/WebSocketServer.dll",
+        "class": "WebSocketServer.WebSocketServerPlugin"
       }
     },
     "windows": {
@@ -54,13 +55,17 @@
       "hud": {
         "file": "windows/hud/hud.html",
         "transparent": true,
-        "resizable": false,
+        "resizable": true,
         "native_window": true,
         "show_in_taskbar": false,
         "topmost": true,
         "size": {
           "width": 260,
           "height": 400
+        },
+        "min_size": {
+          "width": 150,
+          "height": 150
         }
       },
       "dashboard": {
@@ -73,18 +78,6 @@
         "size": {
           "width": 420,
           "height": 360
-        }
-      },
-      "notifications": {
-        "file": "windows/notifications/notifications.html",
-        "transparent": true,
-        "resizable": false,
-        "show_in_taskbar": false,
-        "topmost": true,
-        "click_through": true,
-        "size": {
-          "width": 300,
-          "height": 500
         }
       }
     },
