@@ -568,3 +568,6 @@ body {
   pointer-events: none;
   letter-spacing: 2px;
 }
+
+.voice-hud.transparent-bg { background: transparent !important; border: none !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 0 !important; }
+.voice-hud.transparent-bg .hud-header { border-bottom: none !important; margin-bottom: 0 !important; }

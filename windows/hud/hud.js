@@ -29,6 +29,15 @@ function updateVoiceHUD(state) {
     header.style.display = backgroundWindow.appSettings.disableHeader ? 'none' : 'flex';
   }
 
+  const voiceHud = document.getElementById('voice-hud');
+  if (voiceHud) {
+    if (backgroundWindow.appSettings.transparentBackground) {
+      voiceHud.classList.add('transparent-bg');
+    } else {
+      voiceHud.classList.remove('transparent-bg');
+    }
+  }
+
   const usersList = document.getElementById('hud-users');
 
   if (!state.users || state.users.length === 0) {

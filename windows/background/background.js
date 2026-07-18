@@ -3,20 +3,7 @@ import { WindowsService } from '../../scripts/windows-service.js';
 
 const CLIENT_ID = '207646673902501888'; // Streamkit Client ID
 
-// Strip the Discord markdown subset to plain text — the shared Notifications app renders plain text,
-// not markdown, so **bold**/_italic_/`code` etc. shouldn't leak through as literal syntax.
-function stripMarkdown(text) {
-  if (!text) return '';
-  return String(text)
-    .replace(/\|\|(.+?)\|\|/g, '$1')   // spoiler
-    .replace(/\*\*(.+?)\*\*/g, '$1')   // bold
-    .replace(/__(.+?)__/g, '$1')       // underline
-    .replace(/~~(.+?)~~/g, '$1')       // strikethrough
-    .replace(/\*([^*]+)\*/g, '$1')     // italic *
-    .replace(/_([^_]+)_/g, '$1')       // italic _
-    .replace(/`([^`]+)`/g, '$1')       // inline code
-    .replace(/^#{1,3}\s+/gm, '');      // headings
-}
+
 
 class BackgroundController {
   constructor() {
@@ -144,10 +131,10 @@ class BackgroundController {
       { key: "notificationsEnabled", label: "Enable Voice Alerts", description: "Show notifications for mute, deafen, and stream actions.", type: "checkbox", category: "Alerts", default: true },
       { key: "eventNotificationsEnabled", label: "Enable Channel Event Alerts", description: "Show notifications when users join or leave the voice channel.", type: "checkbox", category: "Alerts", default: true },
       { key: "externalNotificationsPort", label: "Notifications Service Port", description: "Port where the shared Notifications server is listening.", type: "number", category: "Alerts", default: 60234 },
-      { key: "markdownEnabled", label: "Enable Markdown in Chat", description: "Parse bold, italics, code, and spoiler syntax in messages.", type: "checkbox", category: "Chat", default: true },
       { key: "autoLaunch", label: "Start with Overwolf", description: "Automatically start this app when the Overwolf client starts.", type: "checkbox", category: "Lifecycle", default: true },
       { key: "closeOnGameExit", label: "Close on Game Exit", description: "Shut down this app automatically when all games are closed.", type: "checkbox", category: "Lifecycle", default: false },
       { key: "overlayOnDesktop", label: "Show Overlay on Desktop", description: "Maintain HUD visible when out of game.", type: "checkbox", category: "General", default: true },
+      { key: "transparentBackground", label: "Transparent Background", description: "Hide the dark background behind the player list.", type: "checkbox", category: "Appearance", default: false },
       { key: "disableHeader", label: "Hide HUD Header", description: "Fully disable the header part with server and channel name.", type: "checkbox", category: "Appearance", default: false },
       { key: "streamerMode", label: "Streamer Mode", description: "Obfuscate user profile pictures and usernames on the HUD.", type: "checkbox", category: "General", default: false },
       { key: "connectionMode", label: "Connection Mode", description: "Choose interface layer (RPC, bridge server, or mock testing).", type: "select", category: "General", options: [{ value: "rpc", label: "Discord RPC" }, { value: "bridge", label: "C# Bridge Server" }, { value: "mock", label: "Mock Mode (Testing)" }], default: "rpc" },
@@ -193,13 +180,13 @@ class BackgroundController {
     if (vals.notificationsEnabled !== undefined) updated.notificationsEnabled = vals.notificationsEnabled !== false;
     if (vals.eventNotificationsEnabled !== undefined) updated.eventNotificationsEnabled = vals.eventNotificationsEnabled !== false;
     if (vals.externalNotificationsPort !== undefined) updated.externalNotificationsPort = parseInt(vals.externalNotificationsPort, 10);
-    if (vals.markdownEnabled !== undefined) updated.markdownEnabled = vals.markdownEnabled !== false;
     if (vals.overlayOnDesktop !== undefined) updated.overlayOnDesktop = vals.overlayOnDesktop !== false;
     if (vals.connectionMode !== undefined) updated.connectionMode = vals.connectionMode;
     if (vals.statusOverlayVisible !== undefined) updated.statusOverlayVisible = vals.statusOverlayVisible !== false;
     if (vals.dashboardOverlayVisible !== undefined) updated.dashboardOverlayVisible = vals.dashboardOverlayVisible !== false;
     if (vals.autoLaunch !== undefined) updated.autoLaunch = vals.autoLaunch !== false;
     if (vals.closeOnGameExit !== undefined) updated.closeOnGameExit = vals.closeOnGameExit === true;
+    if (vals.transparentBackground !== undefined) updated.transparentBackground = vals.transparentBackground === true;
     if (vals.disableHeader !== undefined) updated.disableHeader = vals.disableHeader === true;
     if (vals.streamerMode !== undefined) updated.streamerMode = vals.streamerMode === true;
 
@@ -408,7 +395,7 @@ class BackgroundController {
     const payload = {
       app: 'Discord',
       title: notif.title || 'Discord',
-      message: stripMarkdown(notif.body || ''),
+      message: notif.body || '',
       icon,
     };
     fetch(`http://localhost:${port}/notify`, {
